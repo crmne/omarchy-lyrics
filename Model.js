@@ -149,15 +149,6 @@ function formatTime(seconds) {
   return minutes + ":" + (rest < 10 ? "0" : "") + rest
 }
 
-function sourceLine(record) {
-  if (!record) return ""
-  var parts = []
-  if (record.synced) parts.push("synced")
-  else if (record.plain) parts.push("plain")
-  if (record.duration) parts.push(formatTime(record.duration))
-  return "lrclib.net" + (parts.length ? " · " + parts.join(" · ") : "")
-}
-
 if (typeof module !== "undefined") {
   module.exports = {
     normalize: normalize,
@@ -170,7 +161,6 @@ if (typeof module !== "undefined") {
     plainLines: plainLines,
     activeLine: activeLine,
     progressFraction: progressFraction,
-    formatTime: formatTime,
-    sourceLine: sourceLine
+    formatTime: formatTime
   }
 }

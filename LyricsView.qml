@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -64,7 +65,7 @@ Item {
   // Lyrics wrap, so their real height is not known until they are laid out.
   // Estimating from the line count keeps the popup's size out of the text's.
   readonly property real naturalBodyHeight: Math.max(Style.space(120), lines.length * lineFont.height * 1.6)
-  readonly property real chromeHeight: chrome.implicitHeight + footer.implicitHeight + gap * 2
+  readonly property real chromeHeight: chrome.implicitHeight + gap * 2
 
   implicitWidth: Style.space(420)
   implicitHeight: {
@@ -198,13 +199,39 @@ Item {
 
     Item {
       width: parent.width
-      height: heading.implicitHeight
+      height: Math.max(albumArt.height, heading.implicitHeight)
+
+      // Whatever cover the player is offering. Hidden rather than left as an
+      // empty square when a track has none, or while it is still loading.
+      Rectangle {
+        id: albumArt
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        width: visible ? Style.space(42) : 0
+        height: Style.space(42)
+        radius: Style.space(6)
+        clip: true
+        visible: cover.status === Image.Ready
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+
+        Image {
+          id: cover
+          anchors.fill: parent
+          source: root.service ? root.service.artUrl : ""
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+          sourceSize.width: 128
+          sourceSize.height: 128
+        }
+      }
 
       Column {
         id: heading
-        anchors.left: parent.left
+        anchors.left: albumArt.visible ? albumArt.right : parent.left
+        anchors.leftMargin: albumArt.visible ? Style.space(10) : 0
         anchors.right: headerActions.left
         anchors.rightMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(2)
 
         Text {
@@ -353,12 +380,12 @@ Item {
     }
   }
 
-  // --- the lyrics, filling everything between chrome and footer ------------
+  // --- the lyrics, filling everything below the header --------------------
 
   ListView {
     id: lyricsList
     anchors.top: chrome.bottom
-    anchors.bottom: footer.top
+    anchors.bottom: parent.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.topMargin: root.gap
@@ -372,6 +399,22 @@ Item {
     // Scrolling by hand means the reader wants to look elsewhere; following
     // resumes on the button, or when the track changes.
     onDragStarted: root.following = false
+
+    // Long lyrics run past the panel; a bar makes that visible.
+    // Gated on real overflow: AsNeeded compares height to contentHeight, and
+    // when they match the ratio rounds to just under 1, leaving a full-length
+    // handle that cannot move.
+    ScrollBar.vertical: ScrollBar {
+      id: lyricsVBar
+      policy: lyricsList.contentHeight > lyricsList.height + 1
+        ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+      contentItem: Rectangle {
+        implicitWidth: Style.space(4)
+        radius: width / 2
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
+                       lyricsVBar.pressed ? 0.55 : 0.28)
+      }
+    }
 
     delegate: Item {
       id: lineItem
@@ -441,18 +484,4 @@ Item {
     }
   }
 
-  // --- footer, pinned to the bottom ----------------------------------------
-
-  Text {
-    id: footer
-    anchors.bottom: parent.bottom
-    anchors.left: parent.left
-    anchors.right: parent.right
-    horizontalAlignment: Text.AlignRight
-    color: root.subtle
-    font.family: Style.font.family
-    font.pixelSize: Style.font.caption
-    elide: Text.ElideRight
-    text: root.ready && root.service ? root.service.sourceLine : ""
-  }
 }

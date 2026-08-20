@@ -37,6 +37,7 @@ Item {
   readonly property string title: activePlayer ? String(activePlayer.trackTitle || "") : ""
   readonly property string artist: activePlayer ? String(activePlayer.trackArtist || "") : ""
   readonly property string album: activePlayer ? String(activePlayer.trackAlbum || "") : ""
+  readonly property string artUrl: activePlayer ? String(activePlayer.trackArtUrl || "") : ""
   readonly property bool playing: !!(activePlayer && activePlayer.isPlaying)
   readonly property string trackKey: hasMedia ? artist + " " + title : ""
   readonly property string nowPlaying: {
@@ -102,7 +103,6 @@ Item {
     if (activeIndex < 0 || activeIndex >= syncedLines.length) return ""
     return String(syncedLines[activeIndex].text || "")
   }
-  readonly property string sourceLine: Model.sourceLine(record)
 
   // A track change bumps the serial so results for the previous song are
   // dropped rather than flashing up against the wrong track.

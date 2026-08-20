@@ -112,11 +112,8 @@ test("progress through the track is a fraction, clamped at both ends", () => {
   assert.equal(Model.progressFraction(30, 0), 0)
 })
 
-test("durations read as times, and the source line says what was found", () => {
+test("durations read as times", () => {
   assert.equal(Model.formatTime(536), "8:56")
   assert.equal(Model.formatTime(9), "0:09")
   assert.equal(Model.formatTime(0), "0:00")
-  assert.equal(Model.sourceLine({ synced: "x", plain: "y", duration: 536 }), "lrclib.net · synced · 8:56")
-  assert.equal(Model.sourceLine({ synced: "", plain: "y", duration: 200 }), "lrclib.net · plain · 3:20")
-  assert.equal(Model.sourceLine(null), "")
 })
