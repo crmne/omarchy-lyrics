@@ -36,6 +36,18 @@ stops it following; the crosshair button picks the song back up. Text size,
 expanded state, and the timing nudge are remembered in
 `~/.local/state/omarchy/settings/lyrics.json`.
 
+Expanding is a step up in size rather than a takeover of the screen, and it
+leaves the text alone: lyrics are already large, and the size is yours to set.
+
+While a track is playing before its first line -- an intro, or a song started
+again after it finished -- there is no line to highlight, so the panel returns
+to the top instead of sitting wherever it was left. Lyrics that came without
+timestamps get scrolled to roughly where the track is, which is the best guess
+available without them.
+
+When a track has no lyrics the panel says so. LRCLIB also marks tracks it knows
+are instrumental, and those say that instead.
+
 The panel opens under the widget and slides to stay on screen, so a bar icon on
 the right opens a panel on the right.
 

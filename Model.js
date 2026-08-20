@@ -134,6 +134,14 @@ function activeLine(lines, position) {
   return found
 }
 
+// How far through the track we are, 0 to 1. Plain lyrics carry no timestamps,
+// so this is the only way to guess which part of the words is being sung.
+function progressFraction(position, length) {
+  var total = Number(length) || 0
+  if (total <= 0) return 0
+  return Math.max(0, Math.min(1, (Number(position) || 0) / total))
+}
+
 function formatTime(seconds) {
   var total = Math.max(0, Math.floor(Number(seconds) || 0))
   var minutes = Math.floor(total / 60)
@@ -161,6 +169,7 @@ if (typeof module !== "undefined") {
     parseSynced: parseSynced,
     plainLines: plainLines,
     activeLine: activeLine,
+    progressFraction: progressFraction,
     formatTime: formatTime,
     sourceLine: sourceLine
   }

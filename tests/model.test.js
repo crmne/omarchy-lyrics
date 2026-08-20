@@ -101,6 +101,17 @@ test("artist and title are tidied the way the databases file them", () => {
   assert.ok(Model.looseMatch("Café", "Cafe"))
 })
 
+test("progress through the track is a fraction, clamped at both ends", () => {
+  assert.equal(Model.progressFraction(0, 200), 0)
+  assert.equal(Model.progressFraction(100, 200), 0.5)
+  assert.equal(Model.progressFraction(200, 200), 1)
+  // Players report a position past the end for a moment when a track ends.
+  assert.equal(Model.progressFraction(250, 200), 1)
+  assert.equal(Model.progressFraction(-5, 200), 0)
+  // Nothing to divide by yet.
+  assert.equal(Model.progressFraction(30, 0), 0)
+})
+
 test("durations read as times, and the source line says what was found", () => {
   assert.equal(Model.formatTime(536), "8:56")
   assert.equal(Model.formatTime(9), "0:09")

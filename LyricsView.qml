@@ -26,6 +26,8 @@ Item {
     return hasSynced ? service.syncedLines : service.plainLines
   }
   readonly property int activeIndex: hasSynced && service ? service.activeIndex : -1
+  readonly property real position: service ? service.position : 0
+  readonly property real trackLength: service ? service.trackLength : 0
 
   readonly property color foreground: bar ? bar.barForeground : Color.popups.text
   readonly property color accent: Color.accent
@@ -102,8 +104,22 @@ Item {
   }
 
   function scrollToActive() {
-    if (!following || activeIndex < 0 || activeIndex >= lines.length) return
-    lyricsList.positionViewAtIndex(activeIndex, ListView.Center)
+    if (!following || !ready || !lines.length) return
+    if (hasSynced) {
+      if (activeIndex >= 0 && activeIndex < lines.length) {
+        lyricsList.positionViewAtIndex(activeIndex, ListView.Center)
+      } else {
+        // Before the first line there is nothing to highlight, and the song is
+        // in its intro. Without this the view stays wherever it was left, so
+        // replaying a finished track sat at the end of the words.
+        lyricsList.positionViewAtBeginning()
+      }
+      return
+    }
+    // Plain lyrics carry no timestamps, so how far through the track we are is
+    // the only guide to which part of the words is being sung.
+    var span = Math.max(0, lyricsList.contentHeight - lyricsList.height)
+    lyricsList.contentY = span * Model.progressFraction(position, trackLength)
   }
 
   FileView {
@@ -127,6 +143,12 @@ Item {
     function onRecordChanged() {
       root.following = true
       lyricsList.contentY = 0
+      Qt.callLater(root.scrollToActive)
+    }
+
+    // Synced lyrics move on the active line; plain ones have only the clock.
+    function onPositionChanged() {
+      if (!root.hasSynced) root.scrollToActive()
     }
   }
 
@@ -366,7 +388,7 @@ Item {
         case "searching": return "Looking for lyrics…"
         case "empty": return root.service && root.service.instrumental
           ? "This one is instrumental."
-          : "Nobody has transcribed this one yet."
+          : "No lyrics found for this one."
         case "error": return root.service ? root.service.errorText : "Something went wrong."
         }
         return ""

@@ -192,8 +192,10 @@ Item {
   function adopt(candidate) {
     bypassCache = false
     record = candidate
-    lookupState = candidate && (candidate.synced || candidate.plain || candidate.instrumental)
-      ? "ready" : "empty"
+    // "Ready" has to mean there are words to show. LRCLIB also files tracks it
+    // knows are instrumental, with no lines at all; treating those as ready
+    // rendered an empty panel instead of saying so.
+    lookupState = candidate && (candidate.synced || candidate.plain) ? "ready" : "empty"
   }
 
   function handleGet(raw) {

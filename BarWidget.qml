@@ -15,8 +15,8 @@ BarWidget {
   readonly property bool ready: lookupState === "ready"
 
   readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
-  readonly property int panelWidthPercent: Math.max(20, Math.min(100, Number(setting("panelWidthPercent", 34))))
-  readonly property int panelHeightPercent: Math.max(30, Math.min(100, Number(setting("panelHeightPercent", 100))))
+  readonly property int panelWidthPercent: Math.max(20, Math.min(100, Number(setting("panelWidthPercent", 30))))
+  readonly property int panelHeightPercent: Math.max(30, Math.min(100, Number(setting("panelHeightPercent", 85))))
 
   property bool popupOpen: false
 
