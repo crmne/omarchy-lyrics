@@ -19,6 +19,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -40,17 +41,21 @@ class BlockedUrl(Exception):
 
 # Every URL is built from the API base below, but a redirect can still point
 # anywhere, so each hop is checked rather than trusted.
-ALLOWED_HOSTS = ("lrclib.net",)
+ALLOWED_URL = re.compile(
+    r"^https://(?:[a-z0-9-]+\.)*lrclib\.net(?:/[^\s]*)?$", re.I)
 
 
 def check_url(url):
-    parts = urllib.parse.urlsplit(str(url or ""))
-    if parts.scheme != "https":
-        raise BlockedUrl("refusing to fetch a %s URL; only https is followed"
-                         % (parts.scheme or "scheme-less"))
-    host = (parts.hostname or "").lower()
-    if not any(host == allowed or host.endswith("." + allowed) for allowed in ALLOWED_HOSTS):
-        raise BlockedUrl("refusing to fetch from %s" % (host or "an unnamed host"))
+    r"""Match the whole URL against a strict shape rather than parsing it.
+
+    Picking a host out of a URL invites disagreement with whatever parser sees
+    it next. `https://evil.example\@lrclib.net/` reads as ours to anything
+    splitting on "@", while a browser treats the backslash as a separator and
+    goes to evil.example. There is no authority to misread here: userinfo,
+    backslashes, ports and whitespace all fail the match outright.
+    """
+    if not ALLOWED_URL.match(str(url or "")):
+        raise BlockedUrl("refusing to fetch %s" % (url or "an empty URL"))
     return url
 
 

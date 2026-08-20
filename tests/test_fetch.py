@@ -47,6 +47,17 @@ class CheckUrl(unittest.TestCase):
             with self.assertRaises(helper.BlockedUrl, msg=url):
                 helper.check_url(url)
 
+    def test_refuses_authorities_a_browser_would_read_differently(self):
+        # A backslash is a separator to the parser browsers use, so this reads
+        # as ours to anything splitting on "@" while a browser goes elsewhere.
+        for url in ("https://evil.example\\@lrclib.net/",
+                    "https://evil.example@lrclib.net/",
+                    "https://lrclib.net:8080/x",
+                    "https://lrclib.net\t.evil.example/x",
+                    "https://lrclib.net /x"):
+            with self.assertRaises(helper.BlockedUrl, msg=url):
+                helper.check_url(url % ())
+
     def test_every_redirect_hop_is_checked_too(self):
         # An allowed host can still redirect anywhere, so the handler re-checks
         # rather than trusting the first URL it was given.
