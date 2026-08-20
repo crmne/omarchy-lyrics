@@ -117,3 +117,22 @@ test("durations read as times", () => {
   assert.equal(Model.formatTime(9), "0:09")
   assert.equal(Model.formatTime(0), "0:00")
 })
+
+test("text handed to shell-drawn components cannot look like markup", () => {
+  // The bar tooltip and the dropdown labels are rendered by the shell, whose
+  // Text elements use QML's markup-sniffing default. Angle brackets are what
+  // makes Qt switch a string to rich text, so they must not survive.
+  assert.equal(Model.safeDisplayText('<img src="https://evil.example/x">'),
+    'img src="https://evil.example/x"')
+  assert.equal(Model.safeDisplayText("<b>bold</b>"), "bbold/b")
+  assert.ok(!Model.safeDisplayText("a <tag> b").includes("<"))
+  assert.ok(!Model.safeDisplayText("a <tag> b").includes(">"))
+
+  // Ordinary text, including newlines the tooltip relies on, is left alone.
+  assert.equal(Model.safeDisplayText("Artist \u2014 Song\nSecond line"),
+    "Artist \u2014 Song\nSecond line")
+  assert.equal(Model.safeDisplayText("Me & You"), "Me & You")
+  assert.equal(Model.safeDisplayText(""), "")
+  assert.equal(Model.safeDisplayText(null), "")
+  assert.equal(Model.safeDisplayText(undefined), "")
+})

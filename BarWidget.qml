@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 // Bar entry point: a microphone that lights up when the song playing has
 // lyrics, and opens the reader when clicked.
@@ -44,20 +45,22 @@ BarWidget {
     dimmed: !root.ready
     tooltipText: {
       if (!root.hasMedia) return "Lyrics"
-      var song = root.service ? root.service.nowPlaying : ""
+      // The tooltip is drawn by the shell, whose Text uses the markup-sniffing
+      // default, so nothing remote reaches it unsanitised.
+      var song = Model.safeDisplayText(root.service ? root.service.nowPlaying : "")
       switch (root.lookupState) {
       case "searching": return "Looking for lyrics\n" + song
       case "ready": {
         // While a synced track plays, the line being sung is more useful than
         // the name of the song, which the bar already shows elsewhere.
-        var line = root.service ? root.service.currentLine : ""
+        var line = Model.safeDisplayText(root.service ? root.service.currentLine : "")
         if (line) return line
         return song + (root.service && root.service.hasSynced ? "\nSynced lyrics" : "\nLyrics")
       }
       case "empty": return root.service && root.service.instrumental
         ? "Instrumental\n" + song
         : "No lyrics found\n" + song
-      case "error": return root.service ? root.service.errorText : "Lyrics"
+      case "error": return Model.safeDisplayText(root.service ? root.service.errorText : "Lyrics")
       }
       return song
     }

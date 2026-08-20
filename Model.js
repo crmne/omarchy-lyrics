@@ -142,6 +142,15 @@ function progressFraction(position, length) {
   return Math.max(0, Math.min(1, (Number(position) || 0) / total))
 }
 
+// Text handed to shell components this plugin does not own, such as the bar
+// tooltip and dropdown labels. Those render with QML's default, which sniffs a
+// string for markup, so remote text reaching them could still load a resource
+// even though every Text in this plugin's own panel is pinned to PlainText.
+// Angle brackets are what makes Qt treat a string as rich text, so they go.
+function safeDisplayText(value) {
+  return String(value === null || value === undefined ? "" : value).replace(/[<>]/g, "")
+}
+
 function formatTime(seconds) {
   var total = Math.max(0, Math.floor(Number(seconds) || 0))
   var minutes = Math.floor(total / 60)
@@ -161,6 +170,7 @@ if (typeof module !== "undefined") {
     plainLines: plainLines,
     activeLine: activeLine,
     progressFraction: progressFraction,
+    safeDisplayText: safeDisplayText,
     formatTime: formatTime
   }
 }
