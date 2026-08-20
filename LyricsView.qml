@@ -35,7 +35,10 @@ Item {
 
   // Reading preferences outlive the popup, and there is no shell API to write
   // back into a widget's shell.json entry, so they get their own state file.
-  property int fontSize: 15
+  // Auto by default: the size follows the shell's own font scale and the room
+  // the panel has. Touching the size buttons pins it until Auto is pressed.
+  property bool fontSizeAuto: true
+  property int manualFontSize: 15
   property bool expanded: false
   property bool preferencesLoaded: false
   // Keeping the sung line in view, until the reader scrolls somewhere else.
@@ -43,6 +46,19 @@ Item {
 
   readonly property int minFontSize: 11
   readonly property int maxFontSize: 30
+
+  // Anchored on the shell's body size, so a bigger `font` base in shell.json
+  // carries through here rather than being second-guessed. Growth with the
+  // panel is damped: twice the width does not want twice the type, only enough
+  // of a step to read it from further away.
+  readonly property int autoFontSize: {
+    var base = Style.font.body * 1.25
+    var compact = Style.space(420)
+    var growth = width > 0 && compact > 0 ? Math.max(1, width / compact) : 1
+    var wanted = base * (1 + 0.7 * (growth - 1))
+    return Math.round(Math.max(minFontSize, Math.min(maxFontSize, wanted)))
+  }
+  readonly property int fontSize: fontSizeAuto ? autoFontSize : manualFontSize
   readonly property int gap: Style.space(8)
   readonly property real compactBodyHeight: Style.space(300)
   // Lyrics wrap, so their real height is not known until they are laid out.
@@ -66,7 +82,10 @@ Item {
   function applyPreferences(raw) {
     try {
       var stored = JSON.parse(String(raw || "{}"))
-      if (stored.fontSize) fontSize = Math.max(minFontSize, Math.min(maxFontSize, Number(stored.fontSize)))
+      if (stored.fontSize) manualFontSize = Math.max(minFontSize, Math.min(maxFontSize, Number(stored.fontSize)))
+      // Files written before Auto existed only ever hold the default size, so
+      // they should not be read as somebody having pinned it.
+      if (stored.fontSizeAuto !== undefined) fontSizeAuto = stored.fontSizeAuto === true
       if (stored.expanded !== undefined) expanded = stored.expanded === true
       if (stored.offset !== undefined && service) service.offset = Number(stored.offset) || 0
     } catch (error) {
@@ -78,7 +97,8 @@ Item {
   function savePreferences() {
     if (!preferencesLoaded) return
     preferencesFile.setText(JSON.stringify({
-      fontSize: fontSize,
+      fontSize: manualFontSize,
+      fontSizeAuto: fontSizeAuto,
       expanded: expanded,
       offset: service ? service.offset : 0
     }, null, 2) + "\n")
@@ -86,8 +106,17 @@ Item {
 
   function setFontSize(size) {
     var next = Math.max(minFontSize, Math.min(maxFontSize, Math.round(size)))
-    if (next === fontSize) return
-    fontSize = next
+    // Stepping the size is what pins it; the button reads from whatever is on
+    // screen now, so the first press nudges the automatic size rather than
+    // jumping back to some size chosen ages ago.
+    manualFontSize = next
+    fontSizeAuto = false
+    savePreferences()
+  }
+
+  function useAutoFontSize() {
+    if (fontSizeAuto) return
+    fontSizeAuto = true
     savePreferences()
   }
 
@@ -131,6 +160,12 @@ Item {
   }
 
   onActiveIndexChanged: scrollToActive()
+
+  // Changing the type size or the panel size reflows every line, so wherever
+  // the sung line had been is no longer where it is. Qt.callLater both waits
+  // for the new layout and collapses the two into a single scroll.
+  onFontSizeChanged: Qt.callLater(scrollToActive)
+  onExpandedChanged: Qt.callLater(scrollToActive)
   onActiveChanged: {
     if (!active) return
     // Coming back to an open panel should land on the line being sung.
@@ -280,6 +315,16 @@ Item {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(2)
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F0068}"
+          tooltipText: root.fontSizeAuto
+            ? "Text size follows the panel"
+            : "Let the text size follow the panel again"
+          foreground: root.fontSizeAuto ? Color.accent : root.foreground
+          onClicked: root.useAutoFontSize()
+        }
 
         PanelActionButton {
           anchors.verticalCenter: parent.verticalCenter
