@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "crmne.lyrics",
+  "name": "Lyrics",
+  "version": "1.0.0",
+  "author": "Carmine Paolino",
+  "license": "MIT",
+  "description": "Lyrics for whatever is already playing, following the song line by line. Reads the track from MPRIS, so there is nothing to search for.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Lyrics",
+    "description": "Lyrics for the song that is playing, highlighted in time with it.",
+    "category": "Media",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "hideWhenIdle": true,
+      "panelWidthPercent": 34,
+      "panelHeightPercent": 100
+    },
+    "schema": [
+      {
+        "key": "panelWidthPercent",
+        "type": "integer",
+        "label": "Expanded width (% of screen)",
+        "description": "How wide the reader grows when expanded with the button in its header. It always opens compact.",
+        "min": 20,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 34
+      },
+      {
+        "key": "panelHeightPercent",
+        "type": "integer",
+        "label": "Expanded height (% of screen)",
+        "description": "The tallest the reader may grow when expanded. Short lyrics still shrink the panel to fit.",
+        "min": 30,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 100
+      },
+      {
+        "key": "hideWhenIdle",
+        "type": "boolean",
+        "label": "Hide when nothing is playing",
+        "description": "Keep the bar clear until a player reports a track.",
+        "defaultValue": true
+      }
+    ]
+  }
+}

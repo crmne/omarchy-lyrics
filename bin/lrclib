@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Fetch lyrics from LRCLIB as JSON.
+
+Network layer for the crmne.lyrics Omarchy plugin. The shell plugin never talks
+to the network itself; it runs this script and reads one JSON object from stdout.
+
+LRCLIB (https://lrclib.net) is a free, open lyrics database with no account and
+no API key. It serves plain lyrics and, for a lot of tracks, synced lyrics in
+LRC format -- a timestamp per line -- which is what lets the reader follow the
+song instead of guessing.
+
+Two subcommands, deliberately dumb: `get` asks for an exact match on the
+metadata MPRIS gave us, and `search` returns candidates. Choosing between those
+candidates is the plugin's job, not this script's.
+"""
+
+import argparse
+import gzip
+import hashlib
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+VERSION = "1.0.0"
+# LRCLIB asks clients to identify themselves rather than pose as a browser.
+UA = "omarchy-lyrics/%s (https://github.com/crmne/omarchy-lyrics)" % VERSION
+API = "https://lrclib.net/api"
+CACHE_DIR = os.path.join(
+    os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
+    "omarchy", "lyrics")
+
+
+def fetch(path, params, timeout=15, missing_ok=False):
+    """GET an LRCLIB endpoint and return the decoded JSON.
+
+    With `missing_ok`, a 404 returns None: LRCLIB answers "nobody has
+    transcribed this track" with 404, which is an ordinary outcome.
+    """
+    url = API + path + "?" + urllib.parse.urlencode(
+        {k: v for k, v in params.items() if v not in (None, "")})
+    request = urllib.request.Request(url, headers={
+        "User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "gzip"})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read()
+            if response.headers.get("Content-Encoding") == "gzip":
+                raw = gzip.decompress(raw)
+    except urllib.error.HTTPError as exc:
+        if missing_ok and exc.code == 404:
+            return None
+        raise
+    return json.loads(raw.decode("utf-8", "replace"))
+
+
+def cached(key, ttl, produce):
+    path = os.path.join(CACHE_DIR, hashlib.sha1(key.encode()).hexdigest() + ".json")
+    try:
+        if time.time() - os.path.getmtime(path) < ttl:
+            with open(path, encoding="utf-8") as handle:
+                return json.load(handle)
+    except (OSError, ValueError):
+        pass
+    payload = produce()
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+    except OSError:
+        pass
+    return payload
+
+
+def shape(record):
+    if not record:
+        return None
+    return {
+        "id": record.get("id"),
+        "artist": record.get("artistName") or "",
+        "track": record.get("trackName") or "",
+        "album": record.get("albumName") or "",
+        "duration": record.get("duration") or 0,
+        "instrumental": bool(record.get("instrumental")),
+        "synced": record.get("syncedLyrics") or "",
+        "plain": record.get("plainLyrics") or "",
+    }
+
+
+def cmd_get(args):
+    def produce():
+        record = fetch("/get", {
+            "artist_name": args.artist,
+            "track_name": args.title,
+            "album_name": args.album,
+            "duration": int(args.duration) if args.duration else None,
+        }, missing_ok=True)
+        return {"result": shape(record)}
+
+    key = "get:%s|%s|%s|%s" % (args.artist, args.title, args.album, args.duration or "")
+    payload = produce() if args.no_cache else cached(key, args.ttl, produce)
+    return {"ok": True, **payload}
+
+
+def cmd_search(args):
+    def produce():
+        records = fetch("/search", {
+            "artist_name": args.artist,
+            "track_name": args.title,
+        }, missing_ok=True) or []
+        # Only candidates that actually carry words are worth ranking.
+        results = [shape(r) for r in records]
+        return {"results": [r for r in results if r and (r["synced"] or r["plain"] or r["instrumental"])]}
+
+    key = "search:%s|%s" % (args.artist, args.title)
+    payload = produce() if args.no_cache else cached(key, args.ttl, produce)
+    return {"ok": True, **payload}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--ttl", type=int, default=30 * 86400)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    get = sub.add_parser("get", help="exact lookup for one track")
+    get.add_argument("--artist", required=True)
+    get.add_argument("--title", required=True)
+    get.add_argument("--album", default="")
+    get.add_argument("--duration", type=float, default=0)
+
+    search = sub.add_parser("search", help="candidates for an artist and title")
+    search.add_argument("--artist", required=True)
+    search.add_argument("--title", required=True)
+
+    args = parser.parse_args()
+    handlers = {"get": cmd_get, "search": cmd_search}
+    try:
+        payload = handlers[args.command](args)
+    except urllib.error.HTTPError as exc:
+        payload = {"ok": False, "code": "http", "error": "LRCLIB returned HTTP %d" % exc.code}
+    except urllib.error.URLError as exc:
+        payload = {"ok": False, "code": "network", "error": "cannot reach LRCLIB: %s" % exc.reason}
+    except ValueError as exc:
+        payload = {"ok": False, "code": "parse", "error": str(exc)}
+    except Exception as exc:
+        payload = {"ok": False, "code": "internal", "error": "%s: %s" % (type(exc).__name__, exc)}
+    json.dump(payload, sys.stdout)
+    sys.stdout.write("\n")
+    return 0 if payload.get("ok") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,386 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import qs.Ui
+import "Model.js" as Model
+
+// Contents of the bar popup. Everything network-facing lives in Service.qml;
+// this file only renders what the service has already loaded.
+//
+// Header and controls are pinned to the top, the source line to the bottom,
+// and the lyrics fill whatever is left.
+Item {
+  id: root
+
+  property QtObject bar: null
+  property QtObject service: null
+  property bool active: false
+  property real maxPanelHeight: 0
+
+  readonly property string lookupState: service ? service.lookupState : "idle"
+  readonly property bool ready: lookupState === "ready"
+  readonly property bool hasSynced: !!(service && service.hasSynced)
+  readonly property var lines: {
+    if (!service || !ready) return []
+    return hasSynced ? service.syncedLines : service.plainLines
+  }
+  readonly property int activeIndex: hasSynced && service ? service.activeIndex : -1
+
+  readonly property color foreground: bar ? bar.barForeground : Color.popups.text
+  readonly property color accent: Color.accent
+  readonly property color subtle: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.45)
+
+  // Reading preferences outlive the popup, and there is no shell API to write
+  // back into a widget's shell.json entry, so they get their own state file.
+  property int fontSize: 15
+  property bool expanded: false
+  property bool preferencesLoaded: false
+  // Keeping the sung line in view, until the reader scrolls somewhere else.
+  property bool following: true
+
+  readonly property int minFontSize: 11
+  readonly property int maxFontSize: 30
+  readonly property int gap: Style.space(8)
+  readonly property real compactBodyHeight: Style.space(300)
+  // Lyrics wrap, so their real height is not known until they are laid out.
+  // Estimating from the line count keeps the popup's size out of the text's.
+  readonly property real naturalBodyHeight: Math.max(Style.space(120), lines.length * lineFont.height * 1.6)
+  readonly property real chromeHeight: chrome.implicitHeight + footer.implicitHeight + gap * 2
+
+  implicitWidth: Style.space(420)
+  implicitHeight: {
+    var bodyHeight = expanded ? naturalBodyHeight : Math.min(naturalBodyHeight, compactBodyHeight)
+    var wanted = chromeHeight + bodyHeight
+    return maxPanelHeight > 0 ? Math.min(maxPanelHeight, wanted) : wanted
+  }
+
+  FontMetrics {
+    id: lineFont
+    font.family: Style.font.family
+    font.pixelSize: root.fontSize
+  }
+
+  function applyPreferences(raw) {
+    try {
+      var stored = JSON.parse(String(raw || "{}"))
+      if (stored.fontSize) fontSize = Math.max(minFontSize, Math.min(maxFontSize, Number(stored.fontSize)))
+      if (stored.expanded !== undefined) expanded = stored.expanded === true
+      if (stored.offset !== undefined && service) service.offset = Number(stored.offset) || 0
+    } catch (error) {
+      // A corrupt state file just means defaults.
+    }
+    preferencesLoaded = true
+  }
+
+  function savePreferences() {
+    if (!preferencesLoaded) return
+    preferencesFile.setText(JSON.stringify({
+      fontSize: fontSize,
+      expanded: expanded,
+      offset: service ? service.offset : 0
+    }, null, 2) + "\n")
+  }
+
+  function setFontSize(size) {
+    var next = Math.max(minFontSize, Math.min(maxFontSize, Math.round(size)))
+    if (next === fontSize) return
+    fontSize = next
+    savePreferences()
+  }
+
+  function setExpanded(value) {
+    if (expanded === value) return
+    expanded = value
+    savePreferences()
+  }
+
+  function nudgeOffset(delta) {
+    if (!service) return
+    service.offset = Math.round((service.offset + delta) * 10) / 10
+    savePreferences()
+  }
+
+  function scrollToActive() {
+    if (!following || activeIndex < 0 || activeIndex >= lines.length) return
+    lyricsList.positionViewAtIndex(activeIndex, ListView.Center)
+  }
+
+  FileView {
+    id: preferencesFile
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/settings/lyrics.json"
+    printErrors: false
+    onLoaded: root.applyPreferences(text())
+    onLoadFailed: root.preferencesLoaded = true
+  }
+
+  onActiveIndexChanged: scrollToActive()
+  onActiveChanged: {
+    if (!active) return
+    // Coming back to an open panel should land on the line being sung.
+    following = true
+    Qt.callLater(scrollToActive)
+  }
+
+  Connections {
+    target: root.service
+    function onRecordChanged() {
+      root.following = true
+      lyricsList.contentY = 0
+    }
+  }
+
+  // --- header, pinned to the top -------------------------------------------
+
+  Column {
+    id: chrome
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    spacing: root.gap
+
+    Item {
+      width: parent.width
+      height: heading.implicitHeight
+
+      Column {
+        id: heading
+        anchors.left: parent.left
+        anchors.right: headerActions.left
+        anchors.rightMargin: Style.space(8)
+        spacing: Style.space(2)
+
+        Text {
+          width: parent.width
+          text: root.service && root.service.title ? root.service.title : "Nothing playing"
+          color: root.foreground
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          font.bold: true
+          elide: Text.ElideRight
+        }
+
+        Text {
+          width: parent.width
+          text: root.service ? root.service.artist : ""
+          color: root.subtle
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+          visible: text !== ""
+        }
+      }
+
+      Row {
+        id: headerActions
+        anchors.right: parent.right
+        anchors.verticalCenter: heading.verticalCenter
+        spacing: Style.space(2)
+
+        PanelActionButton {
+          iconText: "\u{F0450}"
+          tooltipText: "Look the lyrics up again"
+          foreground: root.foreground
+          enabled: !!(root.service && root.service.hasMedia)
+          onClicked: if (root.service) root.service.refresh()
+        }
+
+        PanelActionButton {
+          iconText: root.expanded ? "\u{F0294}" : "\u{F0293}"
+          tooltipText: root.expanded ? "Back to the compact reader" : "Give the lyrics more room"
+          foreground: root.expanded ? Color.accent : root.foreground
+          onClicked: root.setExpanded(!root.expanded)
+        }
+      }
+    }
+
+    // Only synced lyrics have anything to follow or to nudge.
+    Item {
+      width: parent.width
+      height: controls.implicitHeight
+      visible: root.ready && root.hasSynced
+
+      Row {
+        id: controls
+        width: parent.width
+        spacing: Style.space(6)
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F04FE}"
+          tooltipText: root.following ? "Following the song" : "Follow the song again"
+          foreground: root.following ? Color.accent : root.foreground
+          onClicked: {
+            root.following = true
+            root.scrollToActive()
+          }
+        }
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F0374}"
+          tooltipText: "Lyrics are early: hold them back"
+          foreground: root.foreground
+          onClicked: root.nudgeOffset(-0.5)
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(52)
+          horizontalAlignment: Text.AlignHCenter
+          text: {
+            var value = root.service ? root.service.offset : 0
+            if (!value) return "in time"
+            return (value > 0 ? "+" : "") + value.toFixed(1) + "s"
+          }
+          color: root.service && root.service.offset ? root.accent : root.subtle
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F0415}"
+          tooltipText: "Lyrics are late: bring them forward"
+          foreground: root.foreground
+          onClicked: root.nudgeOffset(0.5)
+        }
+
+        Item {
+          width: Math.max(0, controls.width - smaller.width - bigger.width
+                             - Style.space(52) - Style.space(24) * 2 - controls.spacing * 5)
+          height: 1
+        }
+
+        PanelActionButton {
+          id: smaller
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F0374}"
+          tooltipText: "Smaller text"
+          foreground: root.foreground
+          enabled: root.fontSize > root.minFontSize
+          onClicked: root.setFontSize(root.fontSize - 1)
+        }
+
+        PanelActionButton {
+          id: bigger
+          anchors.verticalCenter: parent.verticalCenter
+          iconText: "\u{F0415}"
+          tooltipText: "Bigger text"
+          foreground: root.foreground
+          enabled: root.fontSize < root.maxFontSize
+          onClicked: root.setFontSize(root.fontSize + 1)
+        }
+      }
+    }
+
+    PanelSeparator {
+      width: parent.width
+      foreground: root.foreground
+      visible: root.ready
+    }
+  }
+
+  // --- the lyrics, filling everything between chrome and footer ------------
+
+  ListView {
+    id: lyricsList
+    anchors.top: chrome.bottom
+    anchors.bottom: footer.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.topMargin: root.gap
+    anchors.bottomMargin: root.gap
+    visible: root.ready
+    clip: true
+    model: root.lines
+    boundsBehavior: Flickable.StopAtBounds
+    cacheBuffer: Math.max(0, Math.round(height))
+
+    // Scrolling by hand means the reader wants to look elsewhere; following
+    // resumes on the button, or when the track changes.
+    onDragStarted: root.following = false
+
+    delegate: Item {
+      id: lineItem
+      required property var modelData
+      required property int index
+
+      readonly property bool synced: root.hasSynced
+      // Synced entries are {time, text}; plain lyrics are bare strings.
+      readonly property string lineText: synced ? String(modelData.text || "") : String(modelData || "")
+      readonly property bool current: synced && index === root.activeIndex
+
+      width: ListView.view.width
+      height: Math.max(root.fontSize * 0.9, lineLabel.implicitHeight) + Style.space(6)
+
+      Text {
+        id: lineLabel
+        width: parent.width - Style.space(4)
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        text: lineItem.lineText
+        color: lineItem.current ? root.accent : root.subtle
+        font.family: Style.font.family
+        font.pixelSize: root.fontSize
+        font.bold: lineItem.current
+        wrapMode: Text.WordWrap
+
+        Behavior on color {
+          ColorAnimation { duration: 220 }
+        }
+      }
+
+      MouseArea {
+        anchors.fill: parent
+        enabled: lineItem.synced && !!(root.service && root.service.activePlayer)
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        // Timestamps are only worth having if they can take you there.
+        onClicked: if (root.service) root.service.seekTo(lineItem.modelData.time)
+      }
+    }
+  }
+
+  // --- everything that is not loaded lyrics --------------------------------
+
+  Item {
+    anchors.fill: lyricsList
+    visible: !root.ready
+
+    Text {
+      anchors.centerIn: parent
+      width: parent.width
+      horizontalAlignment: Text.AlignHCenter
+      color: root.subtle
+      font.family: Style.font.family
+      font.pixelSize: Style.font.body
+      wrapMode: Text.WordWrap
+      text: {
+        switch (root.lookupState) {
+        case "idle": return "Play something and its lyrics show up here."
+        case "searching": return "Looking for lyrics…"
+        case "empty": return root.service && root.service.instrumental
+          ? "This one is instrumental."
+          : "Nobody has transcribed this one yet."
+        case "error": return root.service ? root.service.errorText : "Something went wrong."
+        }
+        return ""
+      }
+    }
+  }
+
+  // --- footer, pinned to the bottom ----------------------------------------
+
+  Text {
+    id: footer
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    horizontalAlignment: Text.AlignRight
+    color: root.subtle
+    font.family: Style.font.family
+    font.pixelSize: Style.font.caption
+    elide: Text.ElideRight
+    text: root.ready && root.service ? root.service.sourceLine : ""
+  }
+}
