@@ -197,12 +197,16 @@ Item {
     // Only synced lyrics have anything to follow or to nudge.
     Item {
       width: parent.width
-      height: controls.implicitHeight
+      height: Math.max(timing.implicitHeight, textSize.implicitHeight)
       visible: root.ready && root.hasSynced
 
+      // Two groups anchored to their own edges. Sizing a spacer between them by
+      // hand is what pushed the text-size buttons off the panel: the row holds
+      // seven items and six gaps, and the arithmetic counted neither correctly.
       Row {
-        id: controls
-        width: parent.width
+        id: timing
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(6)
 
         PanelActionButton {
@@ -219,7 +223,7 @@ Item {
         PanelActionButton {
           anchors.verticalCenter: parent.verticalCenter
           iconText: "\u{F0374}"
-          tooltipText: "Lyrics are early: hold them back"
+          tooltipText: "Lyrics run early: hold them back"
           foreground: root.foreground
           onClicked: root.nudgeOffset(-0.5)
         }
@@ -241,21 +245,23 @@ Item {
         PanelActionButton {
           anchors.verticalCenter: parent.verticalCenter
           iconText: "\u{F0415}"
-          tooltipText: "Lyrics are late: bring them forward"
+          tooltipText: "Lyrics run late: bring them forward"
           foreground: root.foreground
           onClicked: root.nudgeOffset(0.5)
         }
+      }
 
-        Item {
-          width: Math.max(0, controls.width - smaller.width - bigger.width
-                             - Style.space(52) - Style.space(24) * 2 - controls.spacing * 5)
-          height: 1
-        }
+      // Its own icons rather than a second pair of plus and minus, which read
+      // as more timing controls sitting oddly far from the first pair.
+      Row {
+        id: textSize
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(2)
 
         PanelActionButton {
-          id: smaller
           anchors.verticalCenter: parent.verticalCenter
-          iconText: "\u{F0374}"
+          iconText: "\u{F09F3}"
           tooltipText: "Smaller text"
           foreground: root.foreground
           enabled: root.fontSize > root.minFontSize
@@ -263,9 +269,8 @@ Item {
         }
 
         PanelActionButton {
-          id: bigger
           anchors.verticalCenter: parent.verticalCenter
-          iconText: "\u{F0415}"
+          iconText: "\u{F09F4}"
           tooltipText: "Bigger text"
           foreground: root.foreground
           enabled: root.fontSize < root.maxFontSize
