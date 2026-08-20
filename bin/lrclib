@@ -34,6 +34,37 @@ CACHE_DIR = os.path.join(
     "omarchy", "lyrics")
 
 
+class BlockedUrl(Exception):
+    """A URL we will not fetch, whatever supplied it."""
+
+
+# Every URL is built from the API base below, but a redirect can still point
+# anywhere, so each hop is checked rather than trusted.
+ALLOWED_HOSTS = ("lrclib.net",)
+
+
+def check_url(url):
+    parts = urllib.parse.urlsplit(str(url or ""))
+    if parts.scheme != "https":
+        raise BlockedUrl("refusing to fetch a %s URL; only https is followed"
+                         % (parts.scheme or "scheme-less"))
+    host = (parts.hostname or "").lower()
+    if not any(host == allowed or host.endswith("." + allowed) for allowed in ALLOWED_HOSTS):
+        raise BlockedUrl("refusing to fetch from %s" % (host or "an unnamed host"))
+    return url
+
+
+class GuardedRedirects(urllib.request.HTTPRedirectHandler):
+    """Re-checks every hop: an allowed host may still redirect anywhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        check_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(GuardedRedirects)
+
+
 def fetch(path, params, timeout=15, missing_ok=False):
     """GET an LRCLIB endpoint and return the decoded JSON.
 
@@ -42,10 +73,10 @@ def fetch(path, params, timeout=15, missing_ok=False):
     """
     url = API + path + "?" + urllib.parse.urlencode(
         {k: v for k, v in params.items() if v not in (None, "")})
-    request = urllib.request.Request(url, headers={
+    request = urllib.request.Request(check_url(url), headers={
         "User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "gzip"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with OPENER.open(request, timeout=timeout) as response:
             raw = response.read()
             if response.headers.get("Content-Encoding") == "gzip":
                 raw = gzip.decompress(raw)
@@ -139,6 +170,8 @@ def main():
     handlers = {"get": cmd_get, "search": cmd_search}
     try:
         payload = handlers[args.command](args)
+    except BlockedUrl as exc:
+        payload = {"ok": False, "code": "blocked", "error": str(exc)}
     except urllib.error.HTTPError as exc:
         payload = {"ok": False, "code": "http", "error": "LRCLIB returned HTTP %d" % exc.code}
     except urllib.error.URLError as exc:

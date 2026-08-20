@@ -30,6 +30,13 @@ Item {
   readonly property real position: service ? service.position : 0
   readonly property real trackLength: service ? service.trackLength : 0
 
+  // Only art the player points at on disk or over https. Track metadata can
+  // name any URL, and loading one is a request we never asked for.
+  readonly property string coverSource: {
+    var url = root.service ? String(root.service.artUrl || "") : ""
+    return /^(file:|https:)/i.test(url) ? url : ""
+  }
+
   readonly property color foreground: bar ? bar.barForeground : Color.popups.text
   readonly property color accent: Color.accent
   readonly property color subtle: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.45)
@@ -217,7 +224,7 @@ Item {
         Image {
           id: cover
           anchors.fill: parent
-          source: root.service ? root.service.artUrl : ""
+          source: root.coverSource
           fillMode: Image.PreserveAspectCrop
           asynchronous: true
           sourceSize.width: 128
@@ -235,6 +242,7 @@ Item {
         spacing: Style.space(2)
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: root.service && root.service.title ? root.service.title : "Nothing playing"
           color: root.foreground
@@ -245,6 +253,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: root.service ? root.service.artist : ""
           color: root.subtle
@@ -313,6 +322,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           width: Style.space(52)
           horizontalAlignment: Text.AlignHCenter
@@ -430,6 +440,7 @@ Item {
       height: Math.max(root.fontSize * 0.9, lineLabel.implicitHeight) + Style.space(6)
 
       Text {
+        textFormat: Text.PlainText
         id: lineLabel
         width: parent.width - Style.space(4)
         anchors.left: parent.left
@@ -463,6 +474,7 @@ Item {
     visible: !root.ready
 
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
