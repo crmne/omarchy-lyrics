@@ -1,8 +1,8 @@
-# Lyrics for Omarchy
+# Lyrics Synced with Music
 
 The words to whatever is already playing, in time with the song.
 
-The widget reads the current track from MPRIS and looks it up on
+The widget picks up whatever you are playing and looks it up on
 [LRCLIB](https://lrclib.net) — so there is nothing to search for, and no
 account to make. When the track has synced lyrics, the line being sung is
 highlighted and the panel follows along; click any line to jump the player
@@ -22,7 +22,8 @@ omarchy bar move crmne.lyrics --section right --before omarchy.tray
 ## Requirements
 
 - Omarchy Quattro with its Quickshell-based shell.
-- Any media player exposing the standard MPRIS interface.
+- Any media player that tells the desktop what it is playing (the standard
+  MPRIS interface, which nearly all of them speak).
 - `/usr/bin/python3` for the fetch helper. No extra packages, no account.
 
 ## Using it
@@ -55,9 +56,9 @@ the right opens a panel on the right.
 
 ## How the track is matched
 
-MPRIS metadata rarely matches a database exactly, so the plugin asks LRCLIB for
-an exact match on artist, title, album and duration first, and only widens to a
-search if that misses.
+What a player reports rarely matches a database exactly, so the plugin asks
+LRCLIB for an exact match on artist, title, album and duration first, and only
+widens to a search if that misses.
 
 Track length decides between candidates, because a search for a well-known title
 returns the same words attached to several different recordings — studio, live,

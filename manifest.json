@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "crmne.lyrics",
-  "name": "Lyrics",
+  "name": "Lyrics Synced with Music",
   "version": "1.0.0",
   "author": "Carmine Paolino",
   "license": "MIT",
-  "description": "Lyrics for whatever is already playing, following the song line by line. Reads the track from MPRIS, so there is nothing to search for.",
+  "description": "Lyrics for whatever you are playing, following the song line by line. It picks the track up from your media player, so there is nothing to search for.",
   "kinds": [
     "service",
     "bar-widget"
@@ -16,8 +16,8 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Lyrics",
-    "description": "Lyrics for the song that is playing, highlighted in time with it.",
+    "displayName": "Lyrics synced with music",
+    "description": "Lyrics for the song you are playing, highlighted in time with it.",
     "category": "Media",
     "allowMultiple": false,
     "defaultSection": "right",
