@@ -8,6 +8,8 @@ account to make. When the track has synced lyrics, the line being sung is
 highlighted and the panel follows along; click any line to jump the player
 there.
 
+![Lyrics in the Omarchy bar](preview.png)
+
 `microphone icon` · `follows the song` · `click a line to seek` · `timing nudge` · `text size`
 
 ## Install
