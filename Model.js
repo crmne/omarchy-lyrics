@@ -20,12 +20,16 @@ function normalize(value) {
     .trim()
 }
 
-// Zero-width and invisible formatting characters, which browsers in particular
-// like to prefix onto a title. They match nothing and only pollute the query.
-var INVISIBLE = /[\u200b-\u200f\u2060-\u2064\ufeff]/g
+// Invisible characters that carry no meaning: a zero-width space, the word
+// joiner, the invisible maths operators browsers like to prefix onto a title,
+// and a byte order mark. Deliberately NOT the zero-width joiner or non-joiner,
+// which are load-bearing: stripping them breaks an emoji sequence into
+// separate people and joins words that Persian and Indic scripts keep apart.
+// Bidi marks are left alone for the same reason.
+var DISPOSABLE = /[\u200b\u2060-\u2064\ufeff]/g
 
 function cleanTitle(title) {
-  var cleaned = String(title || "").replace(INVISIBLE, "")
+  var cleaned = String(title || "").replace(DISPOSABLE, "")
     .replace(BRACKETED_NOISE, "")
     .replace(TRAILING_NOISE, "")
     .replace(FEATURING, "")
@@ -36,7 +40,7 @@ function cleanTitle(title) {
 // Players report collaborations in ways a database does not file them, and
 // LRCLIB itself sometimes stores "TOOL;Tool" for a single artist.
 function cleanArtist(artist) {
-  var cleaned = String(artist || "").replace(INVISIBLE, "").replace(FEATURING, "").split(";")[0].trim()
+  var cleaned = String(artist || "").replace(DISPOSABLE, "").replace(FEATURING, "").split(";")[0].trim()
   return cleaned || String(artist || "").trim()
 }
 

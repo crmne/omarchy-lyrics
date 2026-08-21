@@ -137,11 +137,23 @@ test("text handed to shell-drawn components cannot look like markup", () => {
   assert.equal(Model.safeDisplayText(undefined), "")
 })
 
+test("joiners that carry meaning survive normalisation", () => {
+  // A zero-width joiner holds an emoji sequence together, and a non-joiner
+  // separates letters in Persian and Indic scripts. Stripping either changes
+  // the title rather than tidying it.
+  const family = "\u{1F468}\u200d\u{1F469}\u200d\u{1F467} Song"
+  assert.equal(Model.cleanTitle(family), family)
+  const persian = "\u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645"
+  assert.equal(Model.cleanTitle(persian), persian)
+  assert.equal(Model.cleanArtist(persian), persian)
+})
+
 test("invisible characters a player prefixes onto a title are dropped", () => {
   // Browsers reporting a video prefix an invisible separator, which matches
   // nothing in a lyrics database and only pollutes the query.
   assert.equal(Model.cleanTitle("\u2063Some Video Title"), "Some Video Title")
   assert.equal(Model.cleanTitle("\u200bSong\ufeff"), "Song")
+  assert.equal(Model.cleanTitle("\u2060Song\u2062"), "Song")
   assert.equal(Model.cleanArtist("\u2063Band"), "Band")
   // Ordinary titles are untouched.
   assert.equal(Model.cleanTitle("Song"), "Song")
