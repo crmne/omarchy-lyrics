@@ -86,7 +86,9 @@ def fetch(path, params, timeout=15, missing_ok=False):
             if response.headers.get("Content-Encoding") == "gzip":
                 raw = gzip.decompress(raw)
     except urllib.error.HTTPError as exc:
-        if missing_ok and exc.code == 404:
+        # 404 is "nobody has transcribed this", 400 is "that is not a question
+        # I can answer". Neither is a fault worth putting in front of someone.
+        if missing_ok and exc.code in (400, 404):
             return None
         raise
     return json.loads(raw.decode("utf-8", "replace"))
@@ -126,6 +128,12 @@ def shape(record):
 
 
 def cmd_get(args):
+    # /api/get needs both names and answers 400 without them. Browsers playing a
+    # video report a title and no artist, which is not an error worth showing
+    # anyone: there is simply no exact match to ask for.
+    if not args.artist.strip() or not args.title.strip():
+        return {"ok": True, "result": None}
+
     def produce():
         record = fetch("/get", {
             "artist_name": args.artist,

@@ -8,6 +8,7 @@ the local disk, a host on the loopback or private side of the network, and a
 name that merely looks like the real one.
 """
 
+import argparse
 import importlib.util
 import os
 import unittest
@@ -65,6 +66,20 @@ class CheckUrl(unittest.TestCase):
         self.assertTrue(hasattr(handler, "redirect_request"))
         with self.assertRaises(helper.BlockedUrl):
             helper.check_url("https://evil.example/after-redirect")
+
+
+class MissingMetadata(unittest.TestCase):
+    """A browser playing a video reports a title and no artist."""
+
+    def test_get_without_an_artist_asks_nothing_and_reports_no_result(self):
+        # /api/get answers 400 without both names, which is not a fault worth
+        # putting in front of anyone: there is simply no exact match to ask for.
+        args = argparse.Namespace(artist="", title="Some Video Title", album="",
+                                  duration=0, no_cache=True, ttl=0)
+        self.assertEqual(helper.cmd_get(args), {"ok": True, "result": None})
+
+        args.artist, args.title = "Tool", "   "
+        self.assertEqual(helper.cmd_get(args), {"ok": True, "result": None})
 
 
 if __name__ == "__main__":

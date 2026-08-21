@@ -20,8 +20,12 @@ function normalize(value) {
     .trim()
 }
 
+// Zero-width and invisible formatting characters, which browsers in particular
+// like to prefix onto a title. They match nothing and only pollute the query.
+var INVISIBLE = /[\u200b-\u200f\u2060-\u2064\ufeff]/g
+
 function cleanTitle(title) {
-  var cleaned = String(title || "")
+  var cleaned = String(title || "").replace(INVISIBLE, "")
     .replace(BRACKETED_NOISE, "")
     .replace(TRAILING_NOISE, "")
     .replace(FEATURING, "")
@@ -32,7 +36,7 @@ function cleanTitle(title) {
 // Players report collaborations in ways a database does not file them, and
 // LRCLIB itself sometimes stores "TOOL;Tool" for a single artist.
 function cleanArtist(artist) {
-  var cleaned = String(artist || "").replace(FEATURING, "").split(";")[0].trim()
+  var cleaned = String(artist || "").replace(INVISIBLE, "").replace(FEATURING, "").split(";")[0].trim()
   return cleaned || String(artist || "").trim()
 }
 

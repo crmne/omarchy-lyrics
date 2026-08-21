@@ -136,3 +136,13 @@ test("text handed to shell-drawn components cannot look like markup", () => {
   assert.equal(Model.safeDisplayText(null), "")
   assert.equal(Model.safeDisplayText(undefined), "")
 })
+
+test("invisible characters a player prefixes onto a title are dropped", () => {
+  // Browsers reporting a video prefix an invisible separator, which matches
+  // nothing in a lyrics database and only pollutes the query.
+  assert.equal(Model.cleanTitle("\u2063Some Video Title"), "Some Video Title")
+  assert.equal(Model.cleanTitle("\u200bSong\ufeff"), "Song")
+  assert.equal(Model.cleanArtist("\u2063Band"), "Band")
+  // Ordinary titles are untouched.
+  assert.equal(Model.cleanTitle("Song"), "Song")
+})
