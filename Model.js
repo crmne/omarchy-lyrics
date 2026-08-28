@@ -62,8 +62,8 @@ function scoreCandidate(candidate, artist, title, duration) {
   if (looseMatch(candidate.artist, cleanArtist(artist))) score += 1000
   if (duration > 0 && candidate.duration > 0) {
     var drift = Math.abs(Number(candidate.duration) - Number(duration))
-    if (drift > 30) return -1
-    score += (30 - drift) * 10
+    if (drift > 15) return -1
+    score += (15 - drift) * 10
   }
   // Timestamps are the point of the plugin, so a synced upload wins a tie.
   if (candidate.synced) score += 200
