@@ -145,11 +145,13 @@ Item {
     if (hasSynced) {
       if (activeIndex >= 0 && activeIndex < lines.length) {
         lyricsList.positionViewAtIndex(activeIndex, ListView.Center)
+        if (detachedWindow.visible) detachedLyricsList.positionViewAtIndex(activeIndex, ListView.Center)
       } else {
         // Before the first line there is nothing to highlight, and the song is
         // in its intro. Without this the view stays wherever it was left, so
         // replaying a finished track sat at the end of the words.
         lyricsList.positionViewAtBeginning()
+        if (detachedWindow.visible) detachedLyricsList.positionViewAtBeginning()
       }
       return
     }
@@ -157,6 +159,10 @@ Item {
     // the only guide to which part of the words is being sung.
     var span = Math.max(0, lyricsList.contentHeight - lyricsList.height)
     lyricsList.contentY = span * Model.progressFraction(position, trackLength)
+    if (detachedWindow.visible) {
+      var dSpan = Math.max(0, detachedLyricsList.contentHeight - detachedLyricsList.height)
+      detachedLyricsList.contentY = dSpan * Model.progressFraction(position, trackLength)
+    }
   }
 
   FileView {
@@ -165,6 +171,48 @@ Item {
     printErrors: false
     onLoaded: root.applyPreferences(text())
     onLoadFailed: root.preferencesLoaded = true
+  }
+
+  property bool detachedOpenPending: false
+
+  function openDetached() {
+    if (!ready) return false
+    detachedOpenPending = true
+    if (!detachedRuleProcess.running) {
+      detachedRuleProcess.command = ["hyprctl", "eval",
+        'if stappmus_lyrics_popout_rule == nil then '
+        + 'stappmus_lyrics_popout_rule = hl.window_rule({ '
+        + 'name = "stappmus-lyrics-popout-pre-map", '
+        + 'match = { class = "org[.]quickshell", '
+        + 'title = "Popout — omarchy-lyrics" }, '
+        + 'float = true, size = { 560, 760 }, '
+        + 'move = { "(monitor_w-window_w)/2", '
+        + '"(monitor_h-window_h)/2" } }) '
+        + 'else stappmus_lyrics_popout_rule:set_enabled(true) end']
+      detachedRuleProcess.running = true
+    }
+    return true
+  }
+
+  function showDetachedWindow() {
+    if (!detachedOpenPending || !ready) {
+      detachedOpenPending = false
+      return
+    }
+    detachedOpenPending = false
+    detachedWindow.visible = true
+    if (root.service) root.service.closeRequested()
+    Qt.callLater(function() { detachedFocus.forceActiveFocus() })
+  }
+
+  function closeDetached() {
+    detachedOpenPending = false
+    detachedWindow.visible = false
+  }
+
+  Process {
+    id: detachedRuleProcess
+    onExited: root.showDetachedWindow()
   }
 
   onActiveIndexChanged: scrollToActive()
@@ -269,6 +317,14 @@ Item {
         anchors.right: parent.right
         anchors.verticalCenter: heading.verticalCenter
         spacing: Style.space(2)
+
+        PanelActionButton {
+          iconText: "\u{2197}"
+          tooltipText: "Pop out into a detached window"
+          foreground: root.foreground
+          enabled: root.ready
+          onClicked: root.openDetached()
+        }
 
         PanelActionButton {
           iconText: "\u{F0450}"
@@ -496,4 +552,207 @@ Item {
     }
   }
 
+  FloatingWindow {
+    id: detachedWindow
+    visible: false
+    title: "Popout — omarchy-lyrics"
+    color: Color.popups.background || Qt.rgba(0.1, 0.1, 0.1, 1)
+    implicitWidth: Style.space(560)
+    implicitHeight: Style.space(760)
+    minimumSize: Qt.size(Style.space(380), Style.space(420))
+
+    onVisibleChanged: {
+      if (visible) {
+        Qt.callLater(function() { detachedFocus.forceActiveFocus() })
+      }
+    }
+
+    FocusScope {
+      id: detachedFocus
+      anchors.fill: parent
+      focus: true
+
+      Keys.onEscapePressed: function(event) {
+        root.closeDetached()
+        event.accepted = true
+      }
+
+      Rectangle {
+        anchors.fill: parent
+        color: Color.popups.background || Qt.rgba(0.1, 0.1, 0.1, 1)
+      }
+
+      Item {
+        id: detachedTitleBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: Style.space(58)
+
+        Row {
+          anchors.fill: parent
+          anchors.leftMargin: Style.space(14)
+          anchors.rightMargin: Style.space(10)
+          spacing: Style.space(10)
+
+          Item {
+            id: detachedDragArea
+            width: Math.max(1, parent.width - detachedCloseButton.width - parent.spacing)
+            height: parent.height
+
+            Row {
+              anchors.fill: parent
+              spacing: Style.space(10)
+
+              Text {
+                id: detachedDragHandle
+                anchors.verticalCenter: parent.verticalCenter
+                text: "⠿"
+                color: root.subtle
+                font.family: Style.font.family
+                font.pixelSize: Style.font.title
+              }
+
+              Column {
+                width: Math.max(1, parent.width - detachedDragHandle.width - parent.spacing)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Style.space(2)
+
+                Text {
+                  width: parent.width
+                  text: root.service && root.service.title ? root.service.title : "Lyrics"
+                  color: root.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.title
+                  font.bold: true
+                  elide: Text.ElideRight
+                }
+                Text {
+                  width: parent.width
+                  text: root.service ? root.service.artist : ""
+                  color: root.subtle
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                }
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.SizeAllCursor
+              onPressed: function(mouse) {
+                detachedWindow.startSystemMove()
+                mouse.accepted = true
+              }
+            }
+          }
+
+          PanelActionButton {
+            id: detachedCloseButton
+            anchors.verticalCenter: parent.verticalCenter
+            iconText: "\u{F0156}"
+            tooltipText: "Close detached lyrics"
+            foreground: root.foreground
+            onClicked: root.closeDetached()
+          }
+        }
+      }
+
+      PanelSeparator {
+        id: detachedTitleSeparator
+        anchors.top: detachedTitleBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        foreground: root.foreground
+      }
+
+      ListView {
+        id: detachedLyricsList
+        anchors.top: detachedTitleSeparator.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.topMargin: root.gap
+        anchors.bottomMargin: root.gap
+        visible: root.ready
+        clip: true
+        model: root.lines
+        boundsBehavior: Flickable.StopAtBounds
+        cacheBuffer: Math.max(0, Math.round(height))
+
+        onDragStarted: root.following = false
+
+        ScrollBar.vertical: ScrollBar {
+          id: detachedLyricsVBar
+          policy: detachedLyricsList.contentHeight > detachedLyricsList.height + 1
+            ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+          contentItem: Rectangle {
+            implicitWidth: Style.space(4)
+            radius: width / 2
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
+                           detachedLyricsVBar.pressed ? 0.55 : 0.28)
+          }
+        }
+
+        delegate: Item {
+          id: detachedLineItem
+          required property var modelData
+          required property int index
+
+          readonly property bool synced: root.hasSynced
+          readonly property string lineText: synced ? String(modelData.text || "") : String(modelData || "")
+          readonly property bool current: synced && index === root.activeIndex
+
+          width: ListView.view.width
+          height: Math.max(root.fontSize * 0.9, detachedLineLabel.implicitHeight) + Style.space(6)
+
+          Text {
+            textFormat: Text.PlainText
+            id: detachedLineLabel
+            width: parent.width - Style.space(28)
+            x: Style.space(14)
+            anchors.verticalCenter: parent.verticalCenter
+            text: detachedLineItem.lineText
+            color: detachedLineItem.current ? root.accent : root.subtle
+            font.family: Style.font.family
+            font.pixelSize: root.fontSize
+            font.bold: detachedLineItem.current
+            wrapMode: Text.WordWrap
+
+            Behavior on color {
+              ColorAnimation { duration: 220 }
+            }
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            enabled: detachedLineItem.synced && !!(root.service && root.service.activePlayer)
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: if (root.service) root.service.seekTo(detachedLineItem.modelData.time)
+          }
+        }
+      }
+
+      Item {
+        anchors.top: detachedTitleSeparator.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        visible: !root.ready
+
+        Text {
+          textFormat: Text.PlainText
+          anchors.centerIn: parent
+          width: parent.width
+          horizontalAlignment: Text.AlignHCenter
+          color: root.subtle
+          font.family: Style.font.family
+          font.pixelSize: Style.font.body
+          wrapMode: Text.WordWrap
+          text: "No lyrics found for this one."
+        }
+      }
+    }
+  }
 }
