@@ -42,6 +42,11 @@ expanded state, and the timing nudge are remembered in
 Expanding is a step up in size rather than a takeover of the screen, and it
 leaves the text alone: lyrics are already large, and the size is yours to set.
 
+The widget keeps out of the bar while nothing is playing. Set
+`"hideWhenPaused": true` on its bar entry to have it stand down whenever the
+music is merely paused as well, and `"hideWhenIdle": false` to pin it there
+whatever the player is doing.
+
 While a track is playing before its first line -- an intro, or a song started
 again after it finished -- there is no line to highlight, so the panel returns
 to the top instead of sitting wherever it was left. Lyrics that came without
