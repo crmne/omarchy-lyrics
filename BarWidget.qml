@@ -13,9 +13,11 @@ BarWidget {
   readonly property var service: bar && bar.shell ? bar.shell.serviceFor("crmne.lyrics") : null
   readonly property string lookupState: service ? service.lookupState : "idle"
   readonly property bool hasMedia: service ? service.hasMedia : false
+  readonly property bool isPlaying: service ? service.playing : false
   readonly property bool ready: lookupState === "ready"
 
   readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
+  readonly property bool hideWhenPaused: setting("hideWhenPaused", false) === true
   readonly property int panelWidthPercent: Math.max(20, Math.min(100, Number(setting("panelWidthPercent", 30))))
   readonly property int panelHeightPercent: Math.max(30, Math.min(100, Number(setting("panelHeightPercent", 85))))
 
@@ -26,7 +28,11 @@ BarWidget {
 
   onPopupOpenChanged: if (service) service.panelOpen = popupOpen
 
-  visible: hasMedia || !hideWhenIdle
+  // A paused track still counts as media — the lookup and the reader both want
+  // it — but hideWhenPaused says it has not earned a slot in the bar. The open
+  // reader is the exception either way: pausing to read the words must not
+  // yank the widget the popup is anchored to out from under it.
+  visible: popupOpen || !hideWhenIdle || (hasMedia && (isPlaying || !hideWhenPaused))
   implicitWidth: visible ? (vertical ? barSize : button.implicitWidth) : 0
   implicitHeight: barSize
 

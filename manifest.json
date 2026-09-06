@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "crmne.lyrics",
   "name": "Lyrics Synced with Music",
-  "version": "1.2.5",
+  "version": "1.3.0",
   "author": "Carmine Paolino",
   "license": "MIT",
   "description": "Lyrics for whatever you are playing, following the song line by line. It picks the track up from your media player, so there is nothing to search for.",
@@ -23,6 +23,7 @@
     "defaultSection": "right",
     "defaults": {
       "hideWhenIdle": true,
+      "hideWhenPaused": false,
       "panelWidthPercent": 30,
       "panelHeightPercent": 85
     },
@@ -53,6 +54,13 @@
         "label": "Hide when nothing is playing",
         "description": "Keep the bar clear until a player reports a track.",
         "defaultValue": true
+      },
+      {
+        "key": "hideWhenPaused",
+        "type": "boolean",
+        "label": "Hide when paused too",
+        "description": "Go further and keep the bar clear whenever the music is stopped, not just when there is no track at all. The reader stays put while it is open.",
+        "defaultValue": false
       }
     ]
   }
