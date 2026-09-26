@@ -10,12 +10,10 @@ import "Model.js" as Model
 Item {
   id: root
 
-  // Raised by IPC so a keybind can drive the panel the widget owns.
-  signal toggleRequested()
-  signal openRequested()
-  signal closeRequested()
-
-  // Mirrored back by the widget so `status` reports whether the panel is up.
+  // Whether the reader is up. Written by IPC so a keybind can drive the panel,
+  // written by the widget when the icon is clicked, and read back by `status`.
+  // A plain property rather than a signal because the widget's `Connections` on
+  // this object never fired, leaving `toggle`/`show`/`hide` silently dead.
   property bool panelOpen: false
 
   // Seconds to shift the timing by, for uploads that run early or late.
@@ -290,17 +288,17 @@ Item {
     }
 
     function toggle(): string {
-      root.toggleRequested()
+      root.panelOpen = !root.panelOpen
       return "ok"
     }
 
     function show(): string {
-      root.openRequested()
+      root.panelOpen = true
       return "ok"
     }
 
     function hide(): string {
-      root.closeRequested()
+      root.panelOpen = false
       return "ok"
     }
   }
