@@ -42,7 +42,7 @@ class BlockedUrl(Exception):
 # Every URL is built from the API base below, but a redirect can still point
 # anywhere, so each hop is checked rather than trusted.
 ALLOWED_URL = re.compile(
-    r"^https://(?:[a-z0-9-]+\.)*lrclib\.net(?:/[^\s]*)?$", re.I)
+    r"^https://(?:(?:[a-z0-9-]+\.)*lrclib\.net|api\.lyrics\.ovh)(?:/[^\s]*)?$", re.I)
 
 
 def check_url(url):
@@ -89,6 +89,23 @@ def fetch(path, params, timeout=15, missing_ok=False):
         # 404 is "nobody has transcribed this", 400 is "that is not a question
         # I can answer". Neither is a fault worth putting in front of someone.
         if missing_ok and exc.code in (400, 404):
+            return None
+        raise
+    return json.loads(raw.decode("utf-8", "replace"))
+
+
+def fetch_ovh(artist, title, timeout=15):
+    """GET a Lyrics.ovh endpoint and return the decoded JSON."""
+    url = "https://api.lyrics.ovh/v1/" + urllib.parse.quote(artist, safe="") + "/" + urllib.parse.quote(title, safe="")
+    request = urllib.request.Request(check_url(url), headers={
+        "User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "gzip"})
+    try:
+        with OPENER.open(request, timeout=timeout) as response:
+            raw = response.read()
+            if response.headers.get("Content-Encoding") == "gzip":
+                raw = gzip.decompress(raw)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (400, 404):
             return None
         raise
     return json.loads(raw.decode("utf-8", "replace"))
@@ -141,7 +158,36 @@ def cmd_get(args):
             "album_name": args.album,
             "duration": int(args.duration) if args.duration else None,
         }, missing_ok=True)
-        return {"result": shape(record)}
+        
+        # If no exact match and title contains brackets, try stripping them
+        if not record and "(" in args.title:
+            clean_title = re.sub(r'\s*\([^)]*\)', '', args.title).strip()
+            if clean_title:
+                record = fetch("/get", {
+                    "artist_name": args.artist,
+                    "track_name": clean_title,
+                    "album_name": args.album,
+                    "duration": int(args.duration) if args.duration else None,
+                }, missing_ok=True)
+                
+        if record:
+            return {"result": shape(record)}
+
+        # Fallback to Lyrics.ovh
+        ovh_record = fetch_ovh(args.artist, args.title)
+        if ovh_record and ovh_record.get("lyrics"):
+            return {"result": {
+                "id": "ovh",
+                "artist": args.artist,
+                "track": args.title,
+                "album": args.album,
+                "duration": args.duration,
+                "instrumental": False,
+                "synced": "",
+                "plain": ovh_record.get("lyrics")
+            }}
+        
+        return {"result": None}
 
     key = "get:%s|%s|%s|%s" % (args.artist, args.title, args.album, args.duration or "")
     payload = produce() if args.no_cache else cached(key, args.ttl, produce)
@@ -154,8 +200,54 @@ def cmd_search(args):
             "artist_name": args.artist,
             "track_name": args.title,
         }, missing_ok=True) or []
+        
+        # If no results and title contains brackets, try stripping them
+        if not records and "(" in args.title:
+            clean_title = re.sub(r'\s*\([^)]*\)', '', args.title).strip()
+            if clean_title:
+                records = fetch("/search", {
+                    "artist_name": args.artist,
+                    "track_name": clean_title,
+                }, missing_ok=True) or []
+
+        # If still no results, the artist name might be completely unrecognized by the database
+        # (e.g. player reports the composer instead of the singer). Try searching by title only.
+        if not records:
+            records = fetch("/search", {
+                "track_name": args.title,
+            }, missing_ok=True) or []
+            
+            if not records and "(" in args.title:
+                clean_title = re.sub(r'\s*\([^)]*\)', '', args.title).strip()
+                if clean_title:
+                    records = fetch("/search", {
+                        "track_name": clean_title,
+                    }, missing_ok=True) or []
+
         # Only candidates that actually carry words are worth ranking.
         results = [shape(r) for r in records]
+
+        if not results:
+            # Fallback to Lyrics.ovh with original title
+            ovh_record = fetch_ovh(args.artist, args.title)
+            # And if that fails, try stripped title
+            if not (ovh_record and ovh_record.get("lyrics")) and "(" in args.title:
+                clean_title = re.sub(r'\s*\([^)]*\)', '', args.title).strip()
+                if clean_title:
+                    ovh_record = fetch_ovh(args.artist, clean_title)
+
+            if ovh_record and ovh_record.get("lyrics"):
+                results.append({
+                    "id": "ovh",
+                    "artist": args.artist,
+                    "track": args.title,
+                    "album": "",
+                    "duration": 0,
+                    "instrumental": False,
+                    "synced": "",
+                    "plain": ovh_record.get("lyrics")
+                })
+
         return {"results": [r for r in results if r and (r["synced"] or r["plain"] or r["instrumental"])]}
 
     key = "search:%s|%s" % (args.artist, args.title)
