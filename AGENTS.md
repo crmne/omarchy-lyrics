@@ -38,8 +38,9 @@ apply unless a more specific instruction in this repository says otherwise.
 <!-- github-automation: release-notes -->
 ## Releases
 
-Never use em dashes in user-facing writing, including release titles, release
-notes, and agent responses. Use commas, colons, parentheses, or full stops.
+Never use em dashes in newly authored user-facing writing, including release
+titles, release notes, and agent responses. Use commas, colons, parentheses,
+or full stops.
 
 The rest of this section applies only when this repository publishes
 releases. If it has none, skip it, and do not add tags, release workflows, or
