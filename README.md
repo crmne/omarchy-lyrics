@@ -113,7 +113,9 @@ python3 -m unittest discover -s tests
 
 Lyrics arrive from a remote API, so they are rendered as plain text rather than
 letting QML sniff them for markup, and the fetch helper only follows `https` on
-`lrclib.net`, re-checking every redirect hop.
+`lrclib.net`, re-checking every redirect hop. Responses are size-limited before
+and after decompression, lyrics and search results are capped, and the shell
+collects at most 2 MiB of the helper's output.
 
 Responses are cached under `~/.cache/omarchy/lyrics` for a month, since lyrics
 do not change. Pass `--no-cache` to bypass it.

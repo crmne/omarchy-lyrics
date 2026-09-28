@@ -28,6 +28,10 @@ Item {
   // Called explicitly rather than through the shebang: the shell inherits a
   // PATH where `python3` may be a version manager's shim.
   readonly property string python: "/usr/bin/python3"
+  // The helper prints at most this much; bin/lrclib holds the same figure.
+  // Whatever it prints passes through `head` first, so the shell never
+  // collects more than this even if the helper misbehaves.
+  readonly property int maxOutputBytes: 2 * 1024 * 1024
 
   // --- what is playing -----------------------------------------------------
 
@@ -158,7 +162,10 @@ Item {
   }
 
   function helperCommand(args) {
-    var command = [python, helperPath]
+    var command = [
+      "/usr/bin/sh", "-c", "\"$@\" | /usr/bin/head -c " + (maxOutputBytes + 1),
+      "lrclib", python, helperPath
+    ]
     if (bypassCache) command.push("--no-cache")
     return command.concat(args)
   }
@@ -175,13 +182,7 @@ Item {
   }
 
   function parsePayload(raw) {
-    var text = String(raw || "").trim()
-    if (!text) return null
-    try {
-      return JSON.parse(text)
-    } catch (error) {
-      return null
-    }
+    return Model.parseHelperOutput(raw, maxOutputBytes)
   }
 
   function fail(message) {

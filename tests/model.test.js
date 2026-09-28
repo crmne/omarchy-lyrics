@@ -158,3 +158,19 @@ test("invisible characters a player prefixes onto a title are dropped", () => {
   // Ordinary titles are untouched.
   assert.equal(Model.cleanTitle("Song"), "Song")
 })
+
+test("helper output past the collection cap is refused rather than parsed", () => {
+  const payload = Model.parseHelperOutput("x".repeat(101), 100)
+  assert.equal(payload.ok, false)
+  assert.match(payload.error, /more than any lyrics need/)
+})
+
+test("helper output is parsed, with search results trimmed to the few worth ranking", () => {
+  const results = Array.from({ length: 50 }, (_, id) => ({ id }))
+  const payload = Model.parseHelperOutput(JSON.stringify({ ok: true, results }) + "\n", 1 << 20)
+  assert.equal(payload.ok, true)
+  assert.equal(payload.results.length, 20)
+  assert.equal(Model.parseHelperOutput("", 100), null)
+  assert.equal(Model.parseHelperOutput("not json", 100), null)
+  assert.equal(Model.parseHelperOutput("42", 100), null)
+})

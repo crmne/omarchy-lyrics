@@ -9,7 +9,10 @@ name that merely looks like the real one.
 """
 
 import argparse
+import gzip
 import importlib.util
+import io
+import json
 import os
 import unittest
 
@@ -80,6 +83,78 @@ class MissingMetadata(unittest.TestCase):
 
         args.artist, args.title = "Tool", "   "
         self.assertEqual(helper.cmd_get(args), {"ok": True, "result": None})
+
+
+class FakeResponse(io.BytesIO):
+    def __init__(self, body, headers=None):
+        super().__init__(body)
+        self.headers = headers or {}
+
+
+class ResponseLimits(unittest.TestCase):
+    """A response is refused before it can outgrow the shell's memory."""
+
+    def test_reads_an_ordinary_response_plain_or_gzipped(self):
+        body = b'{"trackName": "Song"}'
+        self.assertEqual(helper.read_limited(FakeResponse(body)), body)
+        packed = FakeResponse(gzip.compress(body), {"Content-Encoding": "gzip"})
+        self.assertEqual(helper.read_limited(packed), body)
+
+    def test_refuses_a_body_larger_than_the_wire_limit(self):
+        body = b"x" * (helper.MAX_RESPONSE_BYTES + 1)
+        with self.assertRaises(helper.TooLarge):
+            helper.read_limited(FakeResponse(body))
+
+    def test_refuses_a_declared_length_before_reading_it(self):
+        response = FakeResponse(b"", {"Content-Length": str(helper.MAX_RESPONSE_BYTES + 1)})
+        with self.assertRaises(helper.TooLarge):
+            helper.read_limited(response)
+
+    def test_refuses_gzip_that_inflates_past_the_decoded_limit(self):
+        # A few kilobytes on the wire, far more once expanded.
+        bomb = gzip.compress(b"\0" * (helper.MAX_DECODED_BYTES + 1))
+        self.assertLess(len(bomb), helper.MAX_RESPONSE_BYTES)
+        with self.assertRaises(helper.TooLarge):
+            helper.read_limited(FakeResponse(bomb, {"Content-Encoding": "gzip"}))
+
+    def test_refuses_encodings_it_cannot_bound(self):
+        with self.assertRaises(ValueError):
+            helper.read_limited(FakeResponse(b"x", {"Content-Encoding": "br"}))
+
+
+class OutputLimits(unittest.TestCase):
+    """What the helper prints stays under the cap the shell collects."""
+
+    def record(self, lyrics):
+        return {"id": 1, "artistName": "A", "trackName": "T", "albumName": "",
+                "duration": 200, "plainLyrics": lyrics, "syncedLyrics": lyrics}
+
+    def test_lyrics_are_cut_at_a_whole_line(self):
+        line = "la la la\n"
+        lyrics = line * (helper.MAX_LYRICS_CHARS // len(line) + 10)
+        shaped = helper.shape(self.record(lyrics))
+        self.assertLessEqual(len(shaped["plain"]), helper.MAX_LYRICS_CHARS)
+        self.assertTrue(shaped["plain"].endswith("la la la"))
+
+    def test_fields_that_are_not_what_they_claim_become_empty(self):
+        shaped = helper.shape({"artistName": ["x"], "duration": "long", "id": {}})
+        self.assertEqual((shaped["artist"], shaped["duration"], shaped["id"]), ("", 0, 0))
+        self.assertIsNone(helper.shape(["not", "a", "record"]))
+
+    def test_search_output_drops_results_until_it_fits(self):
+        # Non-ASCII is escaped six bytes a character, the worst case per field.
+        big = helper.shape(self.record("\u00e9" * helper.MAX_LYRICS_CHARS))
+        encoded = helper.encode({"ok": True, "results": [big] * 50})
+        self.assertLess(len(encoded), helper.MAX_OUTPUT_BYTES)
+        results = json.loads(encoded)["results"]
+        self.assertGreater(len(results), 0)
+        self.assertLessEqual(len(results), helper.MAX_RESULTS)
+
+    def test_oversized_cache_entries_are_capped_on_the_way_out(self):
+        stale = {"artist": "A" * 10000, "plain": "x" * (helper.MAX_LYRICS_CHARS * 2)}
+        result = json.loads(helper.encode({"ok": True, "result": stale}))["result"]
+        self.assertEqual(len(result["artist"]), helper.MAX_FIELD_CHARS)
+        self.assertEqual(len(result["plain"]), helper.MAX_LYRICS_CHARS)
 
 
 if __name__ == "__main__":

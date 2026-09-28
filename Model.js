@@ -85,6 +85,29 @@ function pickCandidate(results, artist, title, duration) {
   return bestScore < 0 ? null : best
 }
 
+// What the fetch helper printed, as an object, or null when it printed nothing
+// usable. Output past `limit` means the helper did not respect its own cap, so
+// it is refused whole rather than parsed; results are trimmed to the few worth
+// ranking either way.
+var MAX_RESULTS = 20
+
+function parseHelperOutput(raw, limit) {
+  var text = String(raw || "")
+  if (limit && text.length > limit)
+    return { ok: false, error: "The lyrics fetcher returned more than any lyrics need." }
+  text = text.trim()
+  if (!text) return null
+  var payload
+  try {
+    payload = JSON.parse(text)
+  } catch (error) {
+    return null
+  }
+  if (!payload || typeof payload !== "object") return null
+  if (Array.isArray(payload.results)) payload.results = payload.results.slice(0, MAX_RESULTS)
+  return payload
+}
+
 // --- LRC ------------------------------------------------------------------
 
 // `[mm:ss.cc]` with optional hundredths, and a line may carry several stamps
@@ -174,6 +197,7 @@ if (typeof module !== "undefined") {
     looseMatch: looseMatch,
     scoreCandidate: scoreCandidate,
     pickCandidate: pickCandidate,
+    parseHelperOutput: parseHelperOutput,
     parseSynced: parseSynced,
     plainLines: plainLines,
     activeLine: activeLine,

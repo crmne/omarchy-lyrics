@@ -15,7 +15,6 @@ candidates is the plugin's job, not this script's.
 """
 
 import argparse
-import gzip
 import hashlib
 import json
 import os
@@ -25,6 +24,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 
 VERSION = "1.0.0"
 # LRCLIB asks clients to identify themselves rather than pose as a browser.
@@ -35,8 +35,24 @@ CACHE_DIR = os.path.join(
     "omarchy", "lyrics")
 
 
+# Everything that crosses a boundary has a ceiling: what LRCLIB sends, what it
+# inflates to, and what this script prints for the shell to hold in memory.
+# Real answers are a few kilobytes; these leave plenty of room above that.
+MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_DECODED_BYTES = 4 * 1024 * 1024
+MAX_RESULTS = 20
+MAX_LYRICS_CHARS = 64 * 1024
+MAX_FIELD_CHARS = 512
+# Service.qml caps what it collects at the same figure, so keep them in step.
+MAX_OUTPUT_BYTES = 2 * 1024 * 1024
+
+
 class BlockedUrl(Exception):
     """A URL we will not fetch, whatever supplied it."""
+
+
+class TooLarge(Exception):
+    """A response bigger than any lyrics could need."""
 
 
 # Every URL is built from the API base below, but a redirect can still point
@@ -70,6 +86,32 @@ class GuardedRedirects(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(GuardedRedirects)
 
 
+def read_limited(response):
+    """Read a response body, refusing it before it can grow past the limits.
+
+    Both the bytes on the wire and what gzip expands them to are bounded, so
+    a small compressed body cannot inflate into something that will not fit.
+    """
+    length = (response.headers.get("Content-Length") or "").strip()
+    if length.isdigit() and int(length) > MAX_RESPONSE_BYTES:
+        raise TooLarge("LRCLIB sent a response too large to be lyrics")
+    raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise TooLarge("LRCLIB sent a response too large to be lyrics")
+    encoding = (response.headers.get("Content-Encoding") or "").strip().lower()
+    if encoding == "gzip":
+        inflater = zlib.decompressobj(zlib.MAX_WBITS | 16)
+        try:
+            raw = inflater.decompress(raw, MAX_DECODED_BYTES + 1)
+        except zlib.error as exc:
+            raise ValueError("LRCLIB sent a damaged response: %s" % exc)
+        if len(raw) > MAX_DECODED_BYTES or inflater.unconsumed_tail:
+            raise TooLarge("LRCLIB sent a response too large to be lyrics")
+    elif encoding not in ("", "identity"):
+        raise ValueError("LRCLIB sent an unexpected %s response" % encoding)
+    return raw
+
+
 def fetch(path, params, timeout=15, missing_ok=False):
     """GET an LRCLIB endpoint and return the decoded JSON.
 
@@ -82,9 +124,7 @@ def fetch(path, params, timeout=15, missing_ok=False):
         "User-Agent": UA, "Accept": "application/json", "Accept-Encoding": "gzip"})
     try:
         with OPENER.open(request, timeout=timeout) as response:
-            raw = response.read()
-            if response.headers.get("Content-Encoding") == "gzip":
-                raw = gzip.decompress(raw)
+            raw = read_limited(response)
     except urllib.error.HTTPError as exc:
         # 404 is "nobody has transcribed this", 400 is "that is not a question
         # I can answer". Neither is a fault worth putting in front of someone.
@@ -97,7 +137,10 @@ def fetch(path, params, timeout=15, missing_ok=False):
 def cached(key, ttl, produce):
     path = os.path.join(CACHE_DIR, hashlib.sha1(key.encode()).hexdigest() + ".json")
     try:
-        if time.time() - os.path.getmtime(path) < ttl:
+        # Entries are this script's own output, but one written before the
+        # limits existed could be any size, so an oversized one is refetched.
+        if (time.time() - os.path.getmtime(path) < ttl
+                and os.path.getsize(path) <= MAX_OUTPUT_BYTES):
             with open(path, encoding="utf-8") as handle:
                 return json.load(handle)
     except (OSError, ValueError):
@@ -112,19 +155,64 @@ def cached(key, ttl, produce):
     return payload
 
 
+def text(value, limit):
+    """A string field from the API, cut down to `limit` characters.
+
+    Lyrics are cut at the last line break that fits, so a truncated song ends on
+    a whole line rather than halfway through a word.
+    """
+    value = value if isinstance(value, str) else ""
+    if len(value) <= limit:
+        return value
+    value = value[:limit]
+    newline = value.rfind("\n")
+    return value[:newline] if newline > 0 else value
+
+
+def number(value):
+    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else 0
+
+
 def shape(record):
-    if not record:
+    if not isinstance(record, dict):
         return None
     return {
-        "id": record.get("id"),
-        "artist": record.get("artistName") or "",
-        "track": record.get("trackName") or "",
-        "album": record.get("albumName") or "",
-        "duration": record.get("duration") or 0,
+        "id": number(record.get("id")),
+        "artist": text(record.get("artistName"), MAX_FIELD_CHARS),
+        "track": text(record.get("trackName"), MAX_FIELD_CHARS),
+        "album": text(record.get("albumName"), MAX_FIELD_CHARS),
+        "duration": number(record.get("duration")),
         "instrumental": bool(record.get("instrumental")),
-        "synced": record.get("syncedLyrics") or "",
-        "plain": record.get("plainLyrics") or "",
+        "synced": text(record.get("syncedLyrics"), MAX_LYRICS_CHARS),
+        "plain": text(record.get("plainLyrics"), MAX_LYRICS_CHARS),
     }
+
+
+def encode(payload):
+    """Serialise the payload, dropping the lowest-ranked search results until it
+    fits the output limit. A single record always fits: its fields are capped."""
+    payload = dict(payload)
+    if isinstance(payload.get("result"), dict):
+        payload["result"] = shape_output(payload["result"])
+    if isinstance(payload.get("results"), list):
+        payload["results"] = [shape_output(r) for r in payload["results"][:MAX_RESULTS]
+                              if isinstance(r, dict)]
+    while True:
+        encoded = json.dumps(payload)
+        if len(encoded) < MAX_OUTPUT_BYTES or not payload.get("results"):
+            return encoded
+        payload["results"] = payload["results"][:-1]
+
+
+def shape_output(record):
+    # Re-apply the field limits to what is about to be printed, whether it
+    # came from the network or from a cache entry written by an older version.
+    return shape({
+        "id": record.get("id"), "artistName": record.get("artist"),
+        "trackName": record.get("track"), "albumName": record.get("album"),
+        "duration": record.get("duration"), "instrumental": record.get("instrumental"),
+        "syncedLyrics": record.get("synced"), "plainLyrics": record.get("plain"),
+    })
 
 
 def cmd_get(args):
@@ -154,8 +242,11 @@ def cmd_search(args):
             "artist_name": args.artist,
             "track_name": args.title,
         }, missing_ok=True) or []
-        # Only candidates that actually carry words are worth ranking.
-        results = [shape(r) for r in records]
+        if not isinstance(records, list):
+            raise ValueError("LRCLIB sent an unexpected search response")
+        # Only candidates that actually carry words are worth ranking, and
+        # LRCLIB ranks them already, so the first few are the ones that matter.
+        results = [shape(r) for r in records[:MAX_RESULTS]]
         return {"results": [r for r in results if r and (r["synced"] or r["plain"] or r["instrumental"])]}
 
     key = "search:%s|%s" % (args.artist, args.title)
@@ -185,6 +276,8 @@ def main():
         payload = handlers[args.command](args)
     except BlockedUrl as exc:
         payload = {"ok": False, "code": "blocked", "error": str(exc)}
+    except TooLarge as exc:
+        payload = {"ok": False, "code": "too_large", "error": str(exc)}
     except urllib.error.HTTPError as exc:
         payload = {"ok": False, "code": "http", "error": "LRCLIB returned HTTP %d" % exc.code}
     except urllib.error.URLError as exc:
@@ -193,7 +286,7 @@ def main():
         payload = {"ok": False, "code": "parse", "error": str(exc)}
     except Exception as exc:
         payload = {"ok": False, "code": "internal", "error": "%s: %s" % (type(exc).__name__, exc)}
-    json.dump(payload, sys.stdout)
+    sys.stdout.write(encode(payload))
     sys.stdout.write("\n")
     return 0 if payload.get("ok") else 1
 
