@@ -108,6 +108,44 @@ function parseHelperOutput(raw, limit) {
   return payload
 }
 
+// --- running the fetch helper ----------------------------------------------
+
+// The helper gets the whole lookup to finish in, and a little more before the
+// shell gives up on it: per-read socket timeouts alone would let a server that
+// drips a byte at a time hold the process open indefinitely.
+var HELPER_DEADLINE_SECONDS = 30
+var HELPER_KILL_SECONDS = HELPER_DEADLINE_SECONDS + 5
+
+// How to run the fetch helper for a lookup: a command and an environment.
+//
+// What is playing is private, and a process's arguments are readable by every
+// user on the machine (/proc/<pid>/cmdline), so the artist, title, album and
+// length travel in the environment, which only this user can read. The
+// command holds only fixed paths, numbers and flags, so the shell text never
+// contains anything that came from a player. Whatever the helper prints passes
+// through `head`, so the shell never collects more than `maxOutputBytes`, and
+// `timeout` ends it if it outlives its own deadline.
+function helperRequest(kind, track, options) {
+  var opts = options || {}
+  var info = track || {}
+  var limit = Math.max(1, Math.floor(Number(opts.maxOutputBytes) || 0)) + 1
+  var command = [
+    "/usr/bin/sh", "-c",
+    "/usr/bin/timeout -k 2 " + HELPER_KILL_SECONDS + " \"$@\" | /usr/bin/head -c " + limit,
+    "lrclib", String(opts.python || "/usr/bin/python3"), String(opts.helperPath || "")
+  ]
+  if (opts.bypassCache) command.push("--no-cache")
+  command.push(kind === "search" ? "search" : "get")
+  var environment = {
+    LRCLIB_ARTIST: cleanArtist(info.artist),
+    LRCLIB_TITLE: cleanTitle(info.title),
+    LRCLIB_ALBUM: kind === "search" ? "" : String(info.album || ""),
+    LRCLIB_DURATION: kind === "search" ? "" : String(Math.max(0, Math.round(Number(info.duration) || 0))),
+    LRCLIB_DEADLINE: String(HELPER_DEADLINE_SECONDS)
+  }
+  return { command: command, environment: environment }
+}
+
 // --- LRC ------------------------------------------------------------------
 
 // `[mm:ss.cc]` with optional hundredths, and a line may carry several stamps
@@ -198,6 +236,9 @@ if (typeof module !== "undefined") {
     scoreCandidate: scoreCandidate,
     pickCandidate: pickCandidate,
     parseHelperOutput: parseHelperOutput,
+    helperRequest: helperRequest,
+    HELPER_DEADLINE_SECONDS: HELPER_DEADLINE_SECONDS,
+    HELPER_KILL_SECONDS: HELPER_KILL_SECONDS,
     parseSynced: parseSynced,
     plainLines: plainLines,
     activeLine: activeLine,

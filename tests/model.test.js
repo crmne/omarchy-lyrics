@@ -1,6 +1,8 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 const Model = require("../Model.js")
+const fs = require("node:fs")
+const path = require("node:path")
 
 // Placeholder text throughout; the parsing rules care about timestamps and
 // structure, not about what the words are.
@@ -173,4 +175,54 @@ test("helper output is parsed, with search results trimmed to the few worth rank
   assert.equal(Model.parseHelperOutput("", 100), null)
   assert.equal(Model.parseHelperOutput("not json", 100), null)
   assert.equal(Model.parseHelperOutput("42", 100), null)
+})
+
+test("the track playing never reaches the helper's command line", () => {
+  // Arguments are readable by every user on the machine; the environment only
+  // by its owner. Invented names, so a match can only mean a leak.
+  const track = { artist: "Invented Artist", title: "Made Up Song", album: "Imaginary Album", duration: 241.4 }
+  const options = { python: "/usr/bin/python3", helperPath: "/x/bin/lrclib", maxOutputBytes: 100 }
+  for (const kind of ["get", "search"]) {
+    const request = Model.helperRequest(kind, track, options)
+    const argv = request.command.join("\0")
+    for (const value of ["Invented", "Made Up", "Imaginary", "241"])
+      assert.ok(!argv.includes(value), kind + " argv carries " + value)
+    assert.equal(request.command.at(-1), kind)
+    assert.equal(request.environment.LRCLIB_ARTIST, "Invented Artist")
+    assert.equal(request.environment.LRCLIB_TITLE, "Made Up Song")
+  }
+  const get = Model.helperRequest("get", track, options)
+  assert.equal(get.environment.LRCLIB_ALBUM, "Imaginary Album")
+  assert.equal(get.environment.LRCLIB_DURATION, "241")
+  assert.ok(Model.helperRequest("get", track, { ...options, bypassCache: true }).command.includes("--no-cache"))
+})
+
+test("the helper runs under a deadline and an output cap, with fixed shell text", () => {
+  const request = Model.helperRequest("get", { artist: "$(touch x)", title: "`id`" },
+    { python: "/usr/bin/python3", helperPath: "/x/bin/lrclib", maxOutputBytes: 100 })
+  assert.deepEqual(request.command.slice(0, 3), ["/usr/bin/sh", "-c",
+    "/usr/bin/timeout -k 2 " + Model.HELPER_KILL_SECONDS + " \"$@\" | /usr/bin/head -c 101"])
+  assert.ok(Model.HELPER_KILL_SECONDS > Model.HELPER_DEADLINE_SECONDS)
+  assert.equal(request.environment.LRCLIB_DEADLINE, String(Model.HELPER_DEADLINE_SECONDS))
+  assert.equal(request.environment.LRCLIB_ARTIST, "$(touch x)")
+})
+
+test("the service builds every helper command through helperRequest", () => {
+  const service = fs.readFileSync(path.join(__dirname, "..", "Service.qml"), "utf8")
+  assert.ok(!/--(artist|title|album|duration)/.test(service))
+  assert.ok(!/\.command\s*=\s*\[/.test(service), "a hand-built command bypasses helperRequest")
+  assert.equal((service.match(/\.environment = request\.environment/g) || []).length, 2)
+})
+
+test("no QML in the plugin uses an editable Qt text input", () => {
+  // Every editable Qt text input reads the clipboard on each change, even
+  // while hidden, so the plugin has none.
+  const root = path.join(__dirname, "..")
+  const files = fs.readdirSync(root, { recursive: true })
+    .filter(f => f.endsWith(".qml") && !f.split(path.sep).includes("node_modules"))
+  assert.ok(files.length >= 3)
+  for (const file of files) {
+    const source = fs.readFileSync(path.join(root, file), "utf8")
+    assert.ok(!/\b(TextInput|TextField|TextEdit|TextArea|NumberField|SpinBox)\s*\{/.test(source), file)
+  }
 })

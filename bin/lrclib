@@ -9,6 +9,11 @@ no API key. It serves plain lyrics and, for a lot of tracks, synced lyrics in
 LRC format -- a timestamp per line -- which is what lets the reader follow the
 song instead of guessing.
 
+What is playing is private, and a process's arguments are readable by every
+user on the machine, so the track arrives in the environment instead:
+LRCLIB_ARTIST, LRCLIB_TITLE, LRCLIB_ALBUM and LRCLIB_DURATION. The command
+line carries only the subcommand and fixed flags.
+
 Two subcommands, deliberately dumb: `get` asks for an exact match on the
 metadata MPRIS gave us, and `search` returns candidates. Choosing between those
 candidates is the plugin's job, not this script's.
@@ -19,6 +24,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import sys
 import time
 import urllib.error
@@ -47,12 +53,55 @@ MAX_FIELD_CHARS = 512
 MAX_OUTPUT_BYTES = 2 * 1024 * 1024
 
 
+# The whole lookup has to finish within this many seconds. Socket timeouts
+# apply to each read, so a server dripping a byte at a time could otherwise
+# keep the helper alive for as long as it liked. Service.qml also runs the
+# helper under `timeout`, a little longer than this, in case it does not exit.
+DEADLINE_SECONDS = 30
+
+
 class BlockedUrl(Exception):
     """A URL we will not fetch, whatever supplied it."""
 
 
 class TooLarge(Exception):
     """A response bigger than any lyrics could need."""
+
+
+class TooSlow(Exception):
+    """LRCLIB did not finish answering before the deadline."""
+
+
+def track_from_environment(environ=None):
+    """The track to look up, taken out of the environment.
+
+    Popped rather than read, so nothing this script starts inherits it. A
+    duration that is not a number is treated as unknown.
+    """
+    environ = os.environ if environ is None else environ
+    values = {key: environ.pop("LRCLIB_" + key.upper(), "")
+              for key in ("artist", "title", "album", "duration", "deadline")}
+    try:
+        duration = float(values["duration"] or 0)
+    except ValueError:
+        duration = 0
+    if duration != duration or duration < 0 or duration == float("inf"):
+        duration = 0
+    try:
+        deadline = int(values["deadline"] or DEADLINE_SECONDS)
+    except ValueError:
+        deadline = DEADLINE_SECONDS
+    return {
+        "artist": text(values["artist"], MAX_FIELD_CHARS),
+        "title": text(values["title"], MAX_FIELD_CHARS),
+        "album": text(values["album"], MAX_FIELD_CHARS),
+        "duration": duration,
+        "deadline": max(1, min(DEADLINE_SECONDS, deadline)),
+    }
+
+
+def give_up(signum, frame):
+    raise TooSlow("LRCLIB took too long to answer")
 
 
 # Every URL is built from the API base below, but a redirect can still point
@@ -260,20 +309,21 @@ def main():
     parser.add_argument("--ttl", type=int, default=30 * 86400)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    get = sub.add_parser("get", help="exact lookup for one track")
-    get.add_argument("--artist", required=True)
-    get.add_argument("--title", required=True)
-    get.add_argument("--album", default="")
-    get.add_argument("--duration", type=float, default=0)
-
-    search = sub.add_parser("search", help="candidates for an artist and title")
-    search.add_argument("--artist", required=True)
-    search.add_argument("--title", required=True)
+    sub.add_parser("get", help="exact lookup for the track in LRCLIB_ARTIST, "
+                   "LRCLIB_TITLE, LRCLIB_ALBUM and LRCLIB_DURATION")
+    sub.add_parser("search", help="candidates for LRCLIB_ARTIST and LRCLIB_TITLE")
 
     args = parser.parse_args()
+    track = track_from_environment()
+    args.artist, args.title = track["artist"], track["title"]
+    args.album, args.duration = track["album"], track["duration"]
     handlers = {"get": cmd_get, "search": cmd_search}
+    signal.signal(signal.SIGALRM, give_up)
+    signal.alarm(track["deadline"])
     try:
         payload = handlers[args.command](args)
+    except TooSlow as exc:
+        payload = {"ok": False, "code": "timeout", "error": str(exc)}
     except BlockedUrl as exc:
         payload = {"ok": False, "code": "blocked", "error": str(exc)}
     except TooLarge as exc:
@@ -286,6 +336,8 @@ def main():
         payload = {"ok": False, "code": "parse", "error": str(exc)}
     except Exception as exc:
         payload = {"ok": False, "code": "internal", "error": "%s: %s" % (type(exc).__name__, exc)}
+    finally:
+        signal.alarm(0)
     sys.stdout.write(encode(payload))
     sys.stdout.write("\n")
     return 0 if payload.get("ok") else 1

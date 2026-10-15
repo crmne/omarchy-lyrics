@@ -14,7 +14,11 @@ import importlib.util
 import io
 import json
 import os
+import sys
+import time
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
 
 HELPER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "lrclib")
 spec = importlib.util.spec_from_loader("lrclib", importlib.machinery.SourceFileLoader("lrclib", HELPER))
@@ -155,6 +159,91 @@ class OutputLimits(unittest.TestCase):
         result = json.loads(helper.encode({"ok": True, "result": stale}))["result"]
         self.assertEqual(len(result["artist"]), helper.MAX_FIELD_CHARS)
         self.assertEqual(len(result["plain"]), helper.MAX_LYRICS_CHARS)
+
+
+class TrackStaysOffTheCommandLine(unittest.TestCase):
+    """What is playing arrives in the environment, which only its owner can
+    read, never in the arguments, which every user can (/proc/<pid>/cmdline)."""
+
+    TRACK = {"LRCLIB_ARTIST": "Invented Artist", "LRCLIB_TITLE": "Made Up Song",
+             "LRCLIB_ALBUM": "Imaginary Album", "LRCLIB_DURATION": "241"}
+
+    def run_main(self, argv, environ, fetch):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["lrclib"] + argv), \
+                mock.patch.dict(os.environ, environ), \
+                mock.patch.object(helper, "fetch", fetch), \
+                redirect_stdout(out):
+            code = helper.main()
+            leftover = {k: os.environ.get(k) for k in environ}
+        return code, json.loads(out.getvalue()), leftover
+
+    def test_get_reads_the_track_from_the_environment(self):
+        seen = {}
+
+        def fetch(path, params, **kwargs):
+            seen[path] = params
+            return None
+
+        code, payload, leftover = self.run_main(["--no-cache", "get"], self.TRACK, fetch)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload, {"ok": True, "result": None})
+        self.assertEqual(seen["/get"], {"artist_name": "Invented Artist",
+                                        "track_name": "Made Up Song",
+                                        "album_name": "Imaginary Album",
+                                        "duration": 241})
+        # Popped, so nothing the helper starts inherits it.
+        self.assertEqual(set(leftover.values()), {None})
+
+    def test_search_reads_the_track_from_the_environment(self):
+        seen = {}
+
+        def fetch(path, params, **kwargs):
+            seen[path] = params
+            return []
+
+        code, payload, _ = self.run_main(["--no-cache", "search"], self.TRACK, fetch)
+        self.assertEqual((code, payload), (0, {"ok": True, "results": []}))
+        self.assertEqual(seen["/search"], {"artist_name": "Invented Artist",
+                                           "track_name": "Made Up Song"})
+
+    def test_track_options_on_the_command_line_are_refused(self):
+        for argv in (["get", "--artist", "A", "--title", "T"],
+                     ["search", "--title", "T"]):
+            with mock.patch.object(sys, "argv", ["lrclib"] + argv), \
+                    redirect_stdout(io.StringIO()), \
+                    mock.patch("sys.stderr", io.StringIO()), \
+                    self.assertRaises(SystemExit, msg=argv):
+                helper.main()
+
+    def test_a_duration_that_is_not_a_number_is_unknown(self):
+        for value in ("", "abc", "nan", "-5", "inf"):
+            track = helper.track_from_environment({"LRCLIB_DURATION": value})
+            self.assertEqual(track["duration"], 0, value)
+        self.assertEqual(helper.track_from_environment({})["artist"], "")
+
+
+class Deadline(unittest.TestCase):
+    """A server that answers slowly enough cannot hold the helper open."""
+
+    def test_a_lookup_that_outlives_the_deadline_is_abandoned(self):
+        def fetch(path, params, **kwargs):
+            time.sleep(5)
+            return None
+
+        environ = dict(TrackStaysOffTheCommandLine.TRACK, LRCLIB_DEADLINE="1")
+        started = time.monotonic()
+        code, payload, _ = TrackStaysOffTheCommandLine.run_main(
+            self, ["--no-cache", "get"], environ, fetch)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["code"], "timeout")
+
+    def test_the_deadline_cannot_be_raised_past_the_ceiling(self):
+        track = helper.track_from_environment({"LRCLIB_DEADLINE": "99999"})
+        self.assertEqual(track["deadline"], helper.DEADLINE_SECONDS)
+        self.assertEqual(helper.track_from_environment({"LRCLIB_DEADLINE": "x"})["deadline"],
+                         helper.DEADLINE_SECONDS)
 
 
 if __name__ == "__main__":

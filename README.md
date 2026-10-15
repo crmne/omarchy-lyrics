@@ -96,11 +96,12 @@ omarchy plugin enable crmne.lyrics --section right --before omarchy.tray
 
 Saving any file under `~/.config/omarchy/plugins/` reloads the plugin.
 
-The fetch helper is usable on its own:
+The fetch helper is usable on its own. It takes the track from the
+environment, not from its arguments:
 
 ```bash
-bin/lrclib get --artist "Artist" --title "Song" --duration 240
-bin/lrclib search --artist "Artist" --title "Song"
+LRCLIB_ARTIST="Artist" LRCLIB_TITLE="Song" LRCLIB_DURATION=240 bin/lrclib get
+LRCLIB_ARTIST="Artist" LRCLIB_TITLE="Song" bin/lrclib search
 ```
 
 Matching, LRC parsing, and the current-line lookup live in `Model.js` as pure
@@ -111,11 +112,20 @@ node --test tests/model.test.js
 python3 -m unittest discover -s tests
 ```
 
+What you are playing stays yours. The plugin runs `/usr/bin/python3` with
+`bin/lrclib` for each lookup, and hands it the artist, title, album and length
+in the environment, which only you can read, rather than as arguments, which
+any user on the machine can see in the process list. The command line holds
+only fixed paths and flags. The helper sends those details to `lrclib.net` and
+nowhere else.
+
 Lyrics arrive from a remote API, so they are rendered as plain text rather than
 letting QML sniff them for markup, and the fetch helper only follows `https` on
 `lrclib.net`, re-checking every redirect hop. Responses are size-limited before
 and after decompression, lyrics and search results are capped, and the shell
-collects at most 2 MiB of the helper's output.
+collects at most 2 MiB of the helper's output. A lookup gets 30 seconds in all,
+so a server answering a byte at a time cannot keep the helper running, and
+`timeout` stops it a few seconds later if it does not stop itself.
 
 Responses are cached under `~/.cache/omarchy/lyrics` for a month, since lyrics
 do not change. Pass `--no-cache` to bypass it.

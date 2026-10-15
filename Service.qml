@@ -145,13 +145,9 @@ Item {
     lookupState = "searching"
     getSerial = serial
     getProc.running = false
-    getProc.command = helperCommand([
-      "get",
-      "--artist", Model.cleanArtist(artist),
-      "--title", Model.cleanTitle(title),
-      "--album", album,
-      "--duration", String(Math.round(trackLength))
-    ])
+    var request = helperRequest("get")
+    getProc.command = request.command
+    getProc.environment = request.environment
     Qt.callLater(function () { getProc.running = true })
   }
 
@@ -161,23 +157,23 @@ Item {
     startLookup()
   }
 
-  function helperCommand(args) {
-    var command = [
-      "/usr/bin/sh", "-c", "\"$@\" | /usr/bin/head -c " + (maxOutputBytes + 1),
-      "lrclib", python, helperPath
-    ]
-    if (bypassCache) command.push("--no-cache")
-    return command.concat(args)
+  // The track goes in the environment, never the arguments: see
+  // Model.helperRequest.
+  function helperRequest(kind) {
+    return Model.helperRequest(kind, {
+      artist: artist, title: title, album: album, duration: trackLength
+    }, {
+      python: python, helperPath: helperPath,
+      maxOutputBytes: maxOutputBytes, bypassCache: bypassCache
+    })
   }
 
   function runSearch() {
     searchSerial = serial
     searchProc.running = false
-    searchProc.command = helperCommand([
-      "search",
-      "--artist", Model.cleanArtist(artist),
-      "--title", Model.cleanTitle(title)
-    ])
+    var request = helperRequest("search")
+    searchProc.command = request.command
+    searchProc.environment = request.environment
     Qt.callLater(function () { searchProc.running = true })
   }
 
