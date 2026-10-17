@@ -1,7 +1,6 @@
 // Isolated screenshot host: the production widget, reader and service with an
 // invented track. The copied service reads no MPRIS player and runs no lookup.
 import QtQuick
-import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -61,40 +60,6 @@ ShellRoot {
       onLoaded: {
         item.settings = { panelWidthPercent: 45, panelHeightPercent: 72, hideWhenIdle: true }
         item.bar = bar
-      }
-    }
-  }
-
-  FloatingWindow {
-    id: preview
-    implicitWidth: 2560; implicitHeight: 1600
-    visible: false
-    color: "#090503"
-    Item {
-      id: composition
-      width: 2560; height: 1600
-      Image {
-        anchors.fill: parent
-        source: Quickshell.env("LYRICS_WALLPAPER")
-        fillMode: Image.PreserveAspectCrop
-        layer.enabled: true
-        layer.effect: MultiEffect { blurEnabled: true; blurMax: 16; blur: 0.7 }
-      }
-      Rectangle { anchors.fill: parent; color: "#a6000000" }
-      Image {
-        id: expandedShot
-        x: 255; y: (1600 - height) / 2
-        width: sourceSize.width; height: sourceSize.height
-        source: preview.visible ? "file://" + Quickshell.env("LYRICS_OUTPUT") + "/expanded.png" : ""
-        layer.enabled: true
-        layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 0.8; shadowOpacity: 0.6; shadowVerticalOffset: 20 }
-      }
-      Image {
-        x: 1465; y: 1600 - 110 - height
-        width: sourceSize.width; height: sourceSize.height
-        source: preview.visible ? "file://" + Quickshell.env("LYRICS_OUTPUT") + "/compact.png" : ""
-        layer.enabled: true
-        layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 0.8; shadowOpacity: 0.6; shadowVerticalOffset: 20 }
       }
     }
   }
@@ -173,10 +138,6 @@ ShellRoot {
       var card = widget.item.capturePopup.captureCard
       if (!card) return "No panel card"
       return card.grabToImage(result => result.saveToFile(path)) ? "ok" : "Capture failed"
-    }
-    function preparePreview(): void { preview.visible = true }
-    function grabPreview(path: string): bool {
-      return composition.grabToImage(result => result.saveToFile(path), Qt.size(1280, 800))
     }
   }
 }

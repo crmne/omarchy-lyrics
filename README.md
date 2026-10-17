@@ -8,13 +8,13 @@ account to make. When the track has synced lyrics, the line being sung is
 highlighted and the panel follows along; click any line to jump the player
 there.
 
-![The lyrics reader, compact and expanded](preview.png)
+![The lyrics reader, following the sung line](preview.png)
 
 The preview shows the actual reader with an invented song (artist, words and
 cover made up for it) in an isolated capture host, not a live player: the
-expanded reader behind the compact one, over Omarchy's Ristretto wallpaper.
-`tools/capture/capture.py` rebuilds it; the copied service reads no player and
-looks nothing up.
+compact reader, large, following the sung line, over Omarchy's Ristretto wallpaper.
+`tools/capture/capture.py` rebuilds it, with `tools/capture/preview.py`
+composing the card; the copied service reads no player and looks nothing up.
 
 `microphone icon` · `follows the song` · `click a line to seek` · `timing nudge` · `text size`
 

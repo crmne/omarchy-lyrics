@@ -20,6 +20,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = Path(__file__).resolve().parent
+# Rendered at five times the logical size, so the marketplace card can show
+# the reader large without upscaling it.
+SCALE = 5
 
 # Invented artist, song and words, written for this capture.
 LYRICS = """[00:08.00]Paper lanterns on the water
@@ -52,7 +55,7 @@ TRACK = {
     "title": "Paper Lanterns",
     "album": "Low Tide Atlas",
     "length": 212,
-    "position": 51.5,
+    "position": 33.0,
 }
 
 
@@ -181,11 +184,10 @@ def main():
                   "duration": TRACK["length"], "instrumental": False, "synced": LYRICS,
                   "plain": "\n".join(line[10:] for line in LYRICS.splitlines())}
         (work / "fixtures.json").write_text(json.dumps(dict(TRACK, record=record, cover="file://" + str(work / "cover.png"))))
-        (work / "screen.json").write_text(json.dumps({"screens": [dict(name="CAPTURE", x=0, y=0, width=2800, height=1800, logicalDpi=96, logicalBaseDpi=96, dpr=1)]}))
+        (work / "screen.json").write_text(json.dumps({"screens": [dict(name="CAPTURE", x=0, y=0, width=1400 * SCALE, height=900 * SCALE, logicalDpi=96, logicalBaseDpi=96, dpr=1)]}))
         env.update(QT_QPA_PLATFORM=f"offscreen:configfile={work / 'screen.json'}",
-                   QT_QUICK_BACKEND="rhi", QSG_RHI_BACKEND="opengl", QSG_INFO="1", QT_SCALE_FACTOR="2",
-                   LYRICS_PLUGIN=str(plugin), LYRICS_FIXTURES=str(work / "fixtures.json"), LYRICS_OUTPUT=str(output),
-                   LYRICS_WALLPAPER="/usr/share/omarchy/themes/ristretto/backgrounds/0-launch.png")
+                   QT_QUICK_BACKEND="rhi", QSG_RHI_BACKEND="opengl", QSG_INFO="1", QT_SCALE_FACTOR=str(SCALE),
+                   LYRICS_PLUGIN=str(plugin), LYRICS_FIXTURES=str(work / "fixtures.json"), LYRICS_OUTPUT=str(output))
         log = work / "qs.log"
 
         def call(method, *args):
@@ -236,13 +238,6 @@ def main():
                     print(filename, found, file=sys.stderr, flush=True)
                     time.sleep(.5)
                     grab(filename)
-                call("preparePreview")
-                time.sleep(1)
-                preview = ROOT / "preview.png"
-                preview.unlink(missing_ok=True)
-                call("grabPreview", str(preview))
-                wait_for(lambda: complete_png(preview), "marketplace preview")
-                print(preview, file=sys.stderr, flush=True)
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
@@ -253,6 +248,7 @@ def main():
                         print(line, file=sys.stderr)
         if "NVIDIA" not in log_text or "llvmpipe" in log_text or "Software" in log_text:
             raise RuntimeError("Capture must use GPU rendering; inspect screenshots/capture.log")
+    subprocess.run([sys.executable, str(TOOLS / "preview.py")], check=True)
 
 
 if __name__ == "__main__": main()
