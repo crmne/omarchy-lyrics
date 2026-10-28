@@ -26,16 +26,14 @@ BarWidget {
 
   onPopupOpenChanged: if (service) service.panelOpen = popupOpen
 
+  // The other half of that mirror: follow the service when something else moves
+  // it, which is how IPC and other bar widgets get to open the reader.
+  readonly property bool serviceWantsOpen: service ? service.panelOpen : false
+  onServiceWantsOpenChanged: if (popupOpen !== serviceWantsOpen) popupOpen = serviceWantsOpen
+
   visible: hasMedia || !hideWhenIdle
   implicitWidth: visible ? (vertical ? barSize : button.implicitWidth) : 0
   implicitHeight: barSize
-
-  Connections {
-    target: root.service
-    function onToggleRequested() { root.toggle() }
-    function onOpenRequested() { root.popupOpen = true }
-    function onCloseRequested() { root.popupOpen = false }
-  }
 
   BarIconButton {
     id: button
