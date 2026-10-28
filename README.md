@@ -30,7 +30,8 @@ omarchy bar move crmne.lyrics --section right --before omarchy.tray
 - Omarchy Quattro with its Quickshell-based shell.
 - Any media player that tells the desktop what it is playing (the standard
   MPRIS interface, which nearly all of them speak).
-- `/usr/bin/python3` for the fetch helper. No extra packages, no account.
+- `/usr/bin/python3` for the fetch and album-art helpers. No extra packages, no
+  account.
 
 ## Using it
 
@@ -114,7 +115,7 @@ Matching, LRC parsing, and the current-line lookup live in `Model.js` as pure
 functions:
 
 ```bash
-node --test tests/model.test.js
+node --test tests/model.test.js tests/artwork.test.js
 python3 -m unittest discover -s tests
 ```
 
@@ -132,6 +133,19 @@ and after decompression, lyrics and search results are capped, and the shell
 collects at most 2 MiB of the helper's output. A lookup gets 30 seconds in all,
 so a server answering a byte at a time cannot keep the helper running, and
 `timeout` stops it a few seconds later if it does not stop itself.
+
+The cover in the panel header never reaches Qt as a URL. Given an `https`
+URL, Qt's `Image` holds the whole response in memory before decoding it, so a
+cover server answering with something huge could exhaust the memory of the
+shell and every widget in it. Instead, while the panel is open, the plugin
+runs `/usr/bin/python3` with `bin/artwork`, which downloads the cover the
+player advertises with a hard limit of 16 MiB and 20 seconds, refusing it as
+soon as either is passed, and the panel loads it from a private cache under
+`~/.cache/omarchy/lyrics/artwork` (the 64 most recent covers, up to 64 MiB in
+all). Covers the player keeps on disk (`file://`) are not copied: they are
+shown only if they are regular files within the same limit. Only `https` is
+followed, with every redirect re-checked, and the cover URL travels in the
+helper's environment (`ARTWORK_URL`), not on its command line.
 
 Responses are cached under `~/.cache/omarchy/lyrics` for a month, since lyrics
 do not change. Pass `--no-cache` to bypass it.

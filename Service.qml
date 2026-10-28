@@ -42,6 +42,9 @@ Item {
   readonly property string artist: activePlayer ? String(activePlayer.trackArtist || "") : ""
   readonly property string album: activePlayer ? String(activePlayer.trackAlbum || "") : ""
   readonly property string artUrl: activePlayer ? String(activePlayer.trackArtUrl || "") : ""
+  // What the panel's cover loads: never the player's URL itself, which Qt
+  // would download without a size limit. See Artwork.qml.
+  readonly property string artSource: artwork.source
   readonly property bool playing: !!(activePlayer && activePlayer.isPlaying)
   readonly property string trackKey: hasMedia ? artist + " " + title : ""
   readonly property string nowPlaying: {
@@ -229,6 +232,13 @@ Item {
       record = null
       lookupState = "empty"
     }
+  }
+
+  // Fetched only while the panel is up, the only place the cover shows.
+  Artwork {
+    id: artwork
+    url: root.artUrl
+    active: root.panelOpen
   }
 
   Process {

@@ -163,7 +163,9 @@ def main():
 
         plugin = work / "plugin"
         plugin.mkdir()
-        for name in ["BarWidget.qml", "LyricsView.qml", "Service.qml", "Model.js"]:
+        for name in ["BarWidget.qml", "LyricsView.qml", "Service.qml", "Model.js",
+                     "Artwork.qml", "Artwork.js", "bin/artwork"]:
+            (plugin / name).parent.mkdir(exist_ok=True)
             shutil.copy(ROOT / name, plugin / name)
         service = plugin / "Service.qml"
         # No MPRIS: the host hands the service a sample player instead.
