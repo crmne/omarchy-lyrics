@@ -226,3 +226,8 @@ test("no QML in the plugin uses an editable Qt text input", () => {
     assert.ok(!/\b(TextInput|TextField|TextEdit|TextArea|NumberField|SpinBox)\s*\{/.test(source), file)
   }
 })
+
+test("a boolean setting reads the same stored as a boolean or as a string", () => {
+  for (const on of [true, "true", " TRUE "]) assert.equal(Model.settingEnabled(on), true)
+  for (const off of [false, "false", "", null, undefined]) assert.equal(Model.settingEnabled(off), false)
+})

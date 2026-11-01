@@ -220,6 +220,11 @@ function safeDisplayText(value) {
   return String(value === null || value === undefined ? "" : value).replace(/[<>]/g, "")
 }
 
+// Whether a boolean setting is on, whichever way it was stored.
+function settingEnabled(value) {
+  return value === true || String(value).trim().toLowerCase() === "true"
+}
+
 function formatTime(seconds) {
   var total = Math.max(0, Math.floor(Number(seconds) || 0))
   var minutes = Math.floor(total / 60)
@@ -244,6 +249,7 @@ if (typeof module !== "undefined") {
     activeLine: activeLine,
     progressFraction: progressFraction,
     safeDisplayText: safeDisplayText,
+    settingEnabled: settingEnabled,
     formatTime: formatTime
   }
 }

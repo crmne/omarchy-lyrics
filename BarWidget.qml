@@ -15,7 +15,9 @@ BarWidget {
   readonly property bool hasMedia: service ? service.hasMedia : false
   readonly property bool ready: lookupState === "ready"
 
-  readonly property bool hideWhenIdle: setting("hideWhenIdle", true) === true
+  // `omarchy bar set` stores what it is given as a string, so "true" and "false"
+  // arrive here as well as the booleans the settings panel writes.
+  readonly property bool hideWhenIdle: Model.settingEnabled(setting("hideWhenIdle", true))
   readonly property int panelWidthPercent: Math.max(20, Math.min(100, Number(setting("panelWidthPercent", 30))))
   readonly property int panelHeightPercent: Math.max(30, Math.min(100, Number(setting("panelHeightPercent", 85))))
 
