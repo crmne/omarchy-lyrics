@@ -26,7 +26,14 @@ BarWidget {
   function close() { popupOpen = false }
   function toggle() { popupOpen = !popupOpen }
 
-  onPopupOpenChanged: if (service) service.panelOpen = popupOpen
+  onPopupOpenChanged: if (service) service.syncPanel()
+  onServiceChanged: if (service) service.registerWidget(root)
+  Component.onDestruction: if (service) service.unregisterWidget(root)
+
+  function showsOn(screenName) {
+    var window = root.QsWindow.window
+    return !!window && !!window.screen && window.screen.name === screenName
+  }
 
   // serviceFor() is a plain call the shell never announces changes to, so a
   // binding on it stays null for good if this widget loads before the service,
@@ -53,13 +60,6 @@ BarWidget {
   visible: hasMedia || !hideWhenIdle
   implicitWidth: visible ? (vertical ? barSize : button.implicitWidth) : 0
   implicitHeight: barSize
-
-  Connections {
-    target: root.service
-    function onToggleRequested() { root.toggle() }
-    function onOpenRequested() { root.popupOpen = true }
-    function onCloseRequested() { root.popupOpen = false }
-  }
 
   BarIconButton {
     id: button

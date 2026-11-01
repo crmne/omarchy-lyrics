@@ -84,7 +84,8 @@ omarchy-shell crmne.lyrics refresh    # look the lyrics up again
 ```
 
 Bind `toggle` to a key in `~/.config/hypr/bindings.conf` to summon the panel
-without reaching for the bar.
+without reaching for the bar. With several monitors the panel opens on the
+focused one, or on the first with the widget if the focused one has none.
 
 ## Remove
 

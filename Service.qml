@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Mpris
 import "Model.js" as Model
@@ -10,13 +11,38 @@ import "Model.js" as Model
 Item {
   id: root
 
-  // Raised by IPC so a keybind can drive the panel the widget owns.
-  signal toggleRequested()
-  signal openRequested()
-  signal closeRequested()
-
-  // Mirrored back by the widget so `status` reports whether the panel is up.
+  // One bar widget per monitor, and each owns its own panel. Whether the reader
+  // is up is worked out from all of them: one widget closing because another
+  // took over says nothing about the panel that is still on screen.
+  property var widgets: []
   property bool panelOpen: false
+
+  function registerWidget(widget) {
+    if (widgets.indexOf(widget) === -1) widgets = widgets.concat([widget])
+    syncPanel()
+  }
+
+  function unregisterWidget(widget) {
+    widgets = widgets.filter(function (other) { return other !== widget })
+    syncPanel()
+  }
+
+  function syncPanel() {
+    panelOpen = widgets.some(function (widget) { return widget.popupOpen })
+  }
+
+  // A keybind means the screen in use, as long as that screen has the widget.
+  function showPanel() {
+    if (panelOpen) return
+    var monitor = Hyprland.focusedMonitor
+    var name = monitor ? monitor.name : ""
+    var widget = widgets.filter(function (other) { return other.showsOn(name) })[0] || widgets[0]
+    if (widget) widget.popupOpen = true
+  }
+
+  function hidePanel() {
+    widgets.forEach(function (widget) { widget.close() })
+  }
 
   // Seconds to shift the timing by, for uploads that run early or late.
   property real offset: 0
@@ -297,17 +323,18 @@ Item {
     }
 
     function toggle(): string {
-      root.toggleRequested()
+      if (root.panelOpen) root.hidePanel()
+      else root.showPanel()
       return "ok"
     }
 
     function show(): string {
-      root.openRequested()
+      root.showPanel()
       return "ok"
     }
 
     function hide(): string {
-      root.closeRequested()
+      root.hidePanel()
       return "ok"
     }
   }
