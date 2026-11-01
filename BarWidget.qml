@@ -10,7 +10,7 @@ BarWidget {
   id: root
   moduleName: "crmne.lyrics"
 
-  readonly property var service: bar && bar.shell ? bar.shell.serviceFor("crmne.lyrics") : null
+  property var service: null
   readonly property string lookupState: service ? service.lookupState : "idle"
   readonly property bool hasMedia: service ? service.hasMedia : false
   readonly property bool ready: lookupState === "ready"
@@ -27,6 +27,28 @@ BarWidget {
   function toggle() { popupOpen = !popupOpen }
 
   onPopupOpenChanged: if (service) service.panelOpen = popupOpen
+
+  // serviceFor() is a plain call the shell never announces changes to, so a
+  // binding on it stays null for good if this widget loads before the service,
+  // and the widget stays hidden with nothing in the log. Ask until it answers.
+  function findService() {
+    if (!service && bar && bar.shell) service = bar.shell.serviceFor("crmne.lyrics") || null
+  }
+
+  onBarChanged: findService()
+
+  Timer {
+    property int attempts: 0
+    interval: 500
+    repeat: true
+    running: !!root.bar && !root.service && attempts < 60
+    onTriggered: {
+      root.findService()
+      if (!root.service && ++attempts === 60)
+        console.warn("crmne.lyrics: the shell has no lyrics service for this bar widget. "
+          + "Custom bars do not get one, and without it the widget has nothing to show.")
+    }
+  }
 
   visible: hasMedia || !hideWhenIdle
   implicitWidth: visible ? (vertical ? barSize : button.implicitWidth) : 0
