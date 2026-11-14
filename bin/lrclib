@@ -129,7 +129,13 @@ class GuardedRedirects(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         check_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        # CPython's http_error_302 reads the redirect's whole body, with no
+        # limit, before following it, so read_limited never sees it. Closed
+        # first, that read gets nothing.
+        if new is not None:
+            fp.close()
+        return new
 
 
 OPENER = urllib.request.build_opener(GuardedRedirects)
