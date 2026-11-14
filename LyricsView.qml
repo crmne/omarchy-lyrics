@@ -32,7 +32,7 @@ Item {
 
   // A local file the service has vetted (see Artwork.qml), never the
   // player's URL itself: only art on disk or over https is considered, and
-  // remote art is downloaded with a size limit before Qt sees it.
+  // the helper bounds and cleans every cover before Qt decodes it.
   readonly property string coverSource: root.service ? String(root.service.artSource || "") : ""
 
   readonly property color foreground: bar ? bar.barForeground : Color.popups.text

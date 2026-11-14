@@ -129,11 +129,11 @@ nowhere else.
 
 Lyrics arrive from a remote API, so they are rendered as plain text rather than
 letting QML sniff them for markup, and the fetch helper only follows `https` on
-`lrclib.net`, re-checking every redirect hop. Responses are size-limited before
-and after decompression, lyrics and search results are capped, and the shell
-collects at most 2 MiB of the helper's output. A lookup gets 30 seconds in all,
-so a server answering a byte at a time cannot keep the helper running, and
-`timeout` stops it a few seconds later if it does not stop itself.
+`lrclib.net`, re-checking every redirect hop and never reading a redirect's
+body. Responses are size-limited before and after decompression, lyrics and
+search results are capped, and the shell collects at most 2 MiB of the
+helper's output. A lookup gets 30 seconds in all, so a server answering a byte
+at a time cannot keep the helper running, and `timeout` stops it a few seconds later if it does not stop itself.
 
 The cover in the panel header never reaches Qt as a URL. Given an `https`
 URL, Qt's `Image` holds the whole response in memory before decoding it, so a
@@ -143,10 +143,19 @@ runs `/usr/bin/python3` with `bin/artwork`, which downloads the cover the
 player advertises with a hard limit of 16 MiB and 20 seconds, refusing it as
 soon as either is passed, and the panel loads it from a private cache under
 `~/.cache/omarchy/lyrics/artwork` (the 64 most recent covers, up to 64 MiB in
-all). Covers the player keeps on disk (`file://`) are not copied: they are
-shown only if they are regular files within the same limit. Only `https` is
-followed, with every redirect re-checked, and the cover URL travels in the
-helper's environment (`ARTWORK_URL`), not on its command line.
+all). Only `https` is followed, with every redirect re-checked and its body
+never read, and the cover URL travels in the helper's environment
+(`ARTWORK_URL`), not on its command line.
+
+A small file can still cost a lot to decode: a PNG of a few kilobytes can
+declare billions of pixels, or carry compressed text and colour profiles that
+inflate to gigabytes. So the helper hands Qt only a PNG or JPEG no larger than
+3072 pixels a side, rewritten with just what draws the picture: text, colour
+profiles, EXIF, comments and other metadata are dropped, and a PNG whose pixel
+data inflates to more than its size needs is refused. Covers the player keeps
+on disk (`file://`), often saved by a browser from a web page, go through the
+same check into the same cache once they are regular files within 16 MiB.
+Anything else, including GIF, WebP and larger pictures, shows no cover.
 
 Responses are cached under `~/.cache/omarchy/lyrics` for a month, since lyrics
 do not change. Pass `--no-cache` to bypass it.
