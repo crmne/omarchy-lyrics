@@ -1,5 +1,10 @@
+//@ pragma OmarchyLoadPatch
 // Isolated screenshot host: the production widget, reader and service with an
 // invented track. The copied service reads no MPRIS player and runs no lookup.
+//
+// The pragma loads the plugin as Omarchy's shell does. Without it, Qt 6.12's
+// own Color type wins over Omarchy's palette (qs.Commons' Color) in files that
+// import both, and the sung line and other accents come out black.
 import QtQuick
 import Quickshell
 import Quickshell.Io
