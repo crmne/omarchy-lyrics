@@ -65,7 +65,10 @@ the right opens a panel on the right.
 
 What a player reports rarely matches a database exactly, so the plugin asks
 LRCLIB for an exact match on artist, title, album and duration first, and only
-widens to a search if that misses.
+widens to a search if that misses. When the title carries something in brackets
+that is not the song's name, such as a composer credit (`Song (M. Jayachandran)`)
+or the film a song is from, and the search finds nothing, it searches once more
+without the brackets, still by the same artist.
 
 Track length decides between candidates, because a search for a well-known title
 returns the same words attached to several different recordings — studio, live,

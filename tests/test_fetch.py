@@ -268,6 +268,52 @@ class TrackStaysOffTheCommandLine(unittest.TestCase):
         self.assertEqual(helper.track_from_environment({})["artist"], "")
 
 
+class BracketedTitles(unittest.TestCase):
+    """A credit in brackets keeps LRCLIB's search from finding the song, so a
+    search that finds nothing asks again without it, by the same artist."""
+
+    RECORD = {"id": 7, "artistName": "Invented Artist", "trackName": "Made Up Song",
+              "albumName": "Imaginary Album", "duration": 241, "syncedLyrics": "[00:01.00] An invented line"}
+
+    def search(self, environ, answers):
+        asked = []
+
+        def fetch(path, params, **kwargs):
+            asked.append(params)
+            return answers.get(params["track_name"], [])
+
+        track = dict(TrackStaysOffTheCommandLine.TRACK, **environ)
+        code, payload, _ = TrackStaysOffTheCommandLine.run_main(self, ["--no-cache", "search"], track, fetch)
+        self.assertEqual(code, 0)
+        return asked, payload["results"]
+
+    def test_a_search_that_finds_nothing_asks_again_without_the_brackets(self):
+        asked, results = self.search({"LRCLIB_TITLE": "Made Up Song (Invented Composer)"},
+                                     {"Made Up Song": [self.RECORD]})
+        self.assertEqual(asked, [{"artist_name": "Invented Artist", "track_name": "Made Up Song (Invented Composer)"},
+                                 {"artist_name": "Invented Artist", "track_name": "Made Up Song"}])
+        self.assertEqual([r["track"] for r in results], ["Made Up Song"])
+
+    def test_a_search_that_finds_the_song_asks_once(self):
+        title = "Made Up Song (Invented Composer)"
+        asked, results = self.search({"LRCLIB_TITLE": title}, {title: [dict(self.RECORD, trackName=title)]})
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(len(results), 1)
+
+    def test_without_an_artist_the_shorter_title_is_not_asked_for(self):
+        asked, results = self.search({"LRCLIB_ARTIST": "", "LRCLIB_TITLE": "Made Up Song (Invented Cover)"},
+                                     {"Made Up Song": [self.RECORD]})
+        self.assertEqual(asked, [{"artist_name": "", "track_name": "Made Up Song (Invented Cover)"}])
+        self.assertEqual(results, [])
+
+    def test_only_a_title_with_something_left_beside_its_brackets_is_shortened(self):
+        self.assertEqual(helper.without_brackets("Made Up Song (Invented Composer)"), "Made Up Song")
+        self.assertEqual(helper.without_brackets("(I Can't Get No) Satisfaction"), "Satisfaction")
+        self.assertEqual(helper.without_brackets("Made Up Song [From \"Invented Film\"]"), "Made Up Song")
+        for title in ("Made Up Song", "(Only Brackets)", "Made Up Song (unclosed", ""):
+            self.assertEqual(helper.without_brackets(title), "", title)
+
+
 class Deadline(unittest.TestCase):
     """A server that answers slowly enough cannot hold the helper open."""
 

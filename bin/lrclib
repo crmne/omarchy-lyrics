@@ -291,18 +291,42 @@ def cmd_get(args):
     return {"ok": True, **payload}
 
 
+# Words in brackets that are not the song's name, such as a composer credit
+# ("Song (M. Jayachandran)") or the film a song is from, which the plugin's own
+# cleanup does not know to drop. LRCLIB's search looks for every word, so they
+# keep it from finding the song at all.
+BRACKETED = re.compile(r"\s*[(\[][^)\]]*[)\]]")
+
+
+def without_brackets(title):
+    """The title without its bracketed parts, or "" if that changes nothing or
+    leaves nothing."""
+    shorter = " ".join(BRACKETED.sub(" ", title).split())
+    return shorter if shorter and shorter != " ".join(title.split()) else ""
+
+
 def cmd_search(args):
-    def produce():
+    def search(title):
         records = fetch("/search", {
             "artist_name": args.artist,
-            "track_name": args.title,
+            "track_name": title,
         }, missing_ok=True) or []
         if not isinstance(records, list):
             raise ValueError("LRCLIB sent an unexpected search response")
         # Only candidates that actually carry words are worth ranking, and
         # LRCLIB ranks them already, so the first few are the ones that matter.
         results = [shape(r) for r in records[:MAX_RESULTS]]
-        return {"results": [r for r in results if r and (r["synced"] or r["plain"] or r["instrumental"])]}
+        return [r for r in results if r and (r["synced"] or r["plain"] or r["instrumental"])]
+
+    def produce():
+        results = search(args.title)
+        # A search that finds nothing asks once more without the bracketed
+        # words, still by the same artist. Without an artist, a title that
+        # short is shared by too many other songs to ask for.
+        shorter = without_brackets(args.title)
+        if not results and shorter and args.artist.strip():
+            results = search(shorter)
+        return {"results": results}
 
     key = "search:%s|%s" % (args.artist, args.title)
     payload = produce() if args.no_cache else cached(key, args.ttl, produce)
