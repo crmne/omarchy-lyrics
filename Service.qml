@@ -149,13 +149,14 @@ Item {
     record = null
     errorText = ""
     debounce.stop()
-    if (!hasMedia) {
-      lookupState = "idle"
-      return
-    }
-    lookupState = "searching"
-    debounce.restart()
+    // With the panel closed nothing is sent: see Model.wantsLookup.
+    lookupState = Model.stateAfterTrackChange(hasMedia, panelOpen)
+    if (lookupState === "searching") debounce.restart()
   }
+
+  // Opening the panel is what looks the track up. A result cached by the
+  // helper comes back without asking LRCLIB.
+  onPanelOpenChanged: if (Model.wantsLookup(hasMedia, panelOpen, lookupState)) startLookup()
 
   // Skipping through a playlist should cost one lookup, not one per track.
   Timer {
@@ -165,7 +166,8 @@ Item {
   }
 
   function startLookup() {
-    if (!hasMedia) {
+    // A debounce that ends after the panel closed waits for it to open again.
+    if (!hasMedia || !panelOpen) {
       lookupState = "idle"
       return
     }
@@ -183,7 +185,15 @@ Item {
   function refresh() {
     if (!hasMedia) return
     bypassCache = true
-    startLookup()
+    if (panelOpen) {
+      startLookup()
+      return
+    }
+    // Closed: drop what is shown, and look again, past the cache, on open.
+    serial++
+    record = null
+    errorText = ""
+    lookupState = "idle"
   }
 
   // The track goes in the environment, never the arguments: see

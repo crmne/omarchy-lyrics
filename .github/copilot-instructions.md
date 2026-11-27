@@ -29,10 +29,12 @@ telemetry, a hosted backend, or a general-purpose manual lyrics client.
 ## Network, privacy, and untrusted text
 
 The documented network behavior sends the playing track's cleaned artist,
-title, album, and duration to LRCLIB over HTTPS. A new provider, endpoint,
-query, account, identifier, or transmitted field is a user-visible privacy and
-product change. Require explicit maintainer approval, documentation, provider
-terms and provenance review, focused tests, and a narrow reason for it.
+title, album, and duration to LRCLIB over HTTPS, and only once the lyrics
+panel is opened: a track change while it is closed sends nothing. A new
+provider, endpoint, query, account, identifier, or transmitted field is a
+user-visible privacy and product change. Require explicit maintainer
+approval, documentation, provider terms and provenance review, focused tests,
+and a narrow reason for it.
 
 - Build requests with structured encoding, never shell interpolation. Keep the
   absolute `/usr/bin/python3` invocation and argument-array process launch.

@@ -2,9 +2,9 @@
 
 The words to whatever is already playing, in time with the song.
 
-The widget picks up whatever you are playing and looks it up on
-[LRCLIB](https://lrclib.net) — so there is nothing to search for, and no
-account to make. When the track has synced lyrics, the line being sung is
+The widget picks up whatever you are playing and, when you open the panel,
+looks it up on [LRCLIB](https://lrclib.net), so there is nothing to search for,
+and no account to make. When the track has synced lyrics, the line being sung is
 highlighted and the panel follows along; click any line to jump the player
 there.
 
@@ -38,7 +38,7 @@ omarchy bar move crmne.lyrics --section right --before omarchy.tray
 | Action | What it does |
 |---|---|
 | left click | open the lyrics |
-| middle click | look them up again, ignoring the cache |
+| middle click | look them up again, ignoring the cache (the next time the panel opens, if it is closed) |
 
 Inside the panel: click a line to seek there, nudge the timing when an upload
 runs early or late, step the text size, or expand the panel. Scrolling by hand
@@ -123,7 +123,10 @@ node --test tests/model.test.js tests/artwork.test.js
 python3 -m unittest discover -s tests
 ```
 
-What you are playing stays yours. The plugin runs `/usr/bin/python3` with
+What you are playing stays yours. Nothing is looked up while the panel is
+closed: a track that starts playing is sent to LRCLIB only when you open the
+panel, and opening it for a track looked up before shows the cached answer
+without asking again. The plugin runs `/usr/bin/python3` with
 `bin/lrclib` for each lookup, and hands it the artist, title, album and length
 in the environment, which only you can read, rather than as arguments, which
 any user on the machine can see in the process list. The command line holds

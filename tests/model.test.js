@@ -214,6 +214,27 @@ test("the service builds every helper command through helperRequest", () => {
   assert.equal((service.match(/\.environment = request\.environment/g) || []).length, 2)
 })
 
+test("a track is looked up only while the panel is open", () => {
+  assert.equal(Model.stateAfterTrackChange(true, false), "idle")
+  assert.equal(Model.stateAfterTrackChange(true, true), "searching")
+  assert.equal(Model.stateAfterTrackChange(false, true), "idle")
+  assert.equal(Model.wantsLookup(true, false, "idle"), false, "closed: nothing is sent")
+  assert.equal(Model.wantsLookup(true, true, "idle"), true, "opening the panel looks it up")
+  for (const state of ["searching", "ready", "empty", "error"])
+    assert.equal(Model.wantsLookup(true, true, state), false, state)
+  assert.equal(Model.wantsLookup(false, true, "idle"), false)
+})
+
+test("the service starts lookups only through the panel-open rules", () => {
+  const service = fs.readFileSync(path.join(__dirname, "..", "Service.qml"), "utf8")
+  const onTrack = service.match(/onTrackKeyChanged: \{[\s\S]*?\n  \}/)[0]
+  assert.match(onTrack, /Model\.stateAfterTrackChange\(hasMedia, panelOpen\)/)
+  assert.ok(!/startLookup\(\)/.test(onTrack), "a track change never looks up directly")
+  assert.match(service, /onPanelOpenChanged: if \(Model\.wantsLookup\(hasMedia, panelOpen, lookupState\)\) startLookup\(\)/)
+  const start = service.match(/function startLookup\(\) \{[\s\S]*?\n  \}/)[0]
+  assert.match(start, /if \(!hasMedia \|\| !panelOpen\)/)
+})
+
 test("no QML in the plugin uses an editable Qt text input", () => {
   // Every editable Qt text input reads the clipboard on each change, even
   // while hidden, so the plugin has none.

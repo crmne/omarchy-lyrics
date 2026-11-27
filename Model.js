@@ -113,6 +113,21 @@ function parseHelperOutput(raw, limit) {
 // The helper gets the whole lookup to finish in, and a little more before the
 // shell gives up on it: per-read socket timeouts alone would let a server that
 // drips a byte at a time hold the process open indefinitely.
+// --- when to look -----------------------------------------------------------
+
+// What is playing reaches LRCLIB only when you open the lyrics panel, never
+// because a track changed while it was closed. A track change with the panel
+// closed leaves the lookup idle; opening the panel starts it.
+function stateAfterTrackChange(hasMedia, panelOpen) {
+  return hasMedia && panelOpen ? "searching" : "idle"
+}
+
+// Whether to ask the helper now: only for a track with no lookup yet, and only
+// while the panel is open.
+function wantsLookup(hasMedia, panelOpen, lookupState) {
+  return !!hasMedia && !!panelOpen && lookupState === "idle"
+}
+
 var HELPER_DEADLINE_SECONDS = 30
 var HELPER_KILL_SECONDS = HELPER_DEADLINE_SECONDS + 5
 
@@ -242,6 +257,8 @@ if (typeof module !== "undefined") {
     pickCandidate: pickCandidate,
     parseHelperOutput: parseHelperOutput,
     helperRequest: helperRequest,
+    stateAfterTrackChange: stateAfterTrackChange,
+    wantsLookup: wantsLookup,
     HELPER_DEADLINE_SECONDS: HELPER_DEADLINE_SECONDS,
     HELPER_KILL_SECONDS: HELPER_KILL_SECONDS,
     parseSynced: parseSynced,
