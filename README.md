@@ -150,6 +150,13 @@ all). Only `https` is followed, with every redirect re-checked and its body
 never read, and the cover URL travels in the helper's environment
 (`ARTWORK_URL`), not on its command line.
 
+The player chooses where its cover lives, so the helper connects only to
+public internet addresses. A cover on this machine or on a local or private
+network (loopback, private and link-local ranges, carrier-grade NAT and the
+like) is refused before any connection is made, on every redirect hop, and the
+address checked is the one connected to. Proxy settings are not used for
+covers, since a proxy would make that connection instead.
+
 A small file can still cost a lot to decode: a PNG of a few kilobytes can
 declare billions of pixels, or carry compressed text and colour profiles that
 inflate to gigabytes. So the helper hands Qt only a PNG or JPEG no larger than
